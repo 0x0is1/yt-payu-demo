@@ -30,3 +30,4 @@ test.describe('Admin Login & Merchant Settings Verification', () => {
     await expect(page.locator('text=Login').first()).toBeVisible({ timeout: 15000 });
   });
 });
+

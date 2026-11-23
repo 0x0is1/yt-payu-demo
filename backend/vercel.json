@@ -1,10 +1,4 @@
 {
-  "name": "backend-payu-yt",
-  "bunVersion": "1.x",
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "bunVersion": "1.x"
 }

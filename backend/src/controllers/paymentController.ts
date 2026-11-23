@@ -4,7 +4,7 @@ import { createRazorpayPaymentLink } from '../services/razorpay';
 import { notificationService } from '../services/notificationService';
 import { confirmUpiSchema } from '../validators/schemas';
 
-export async function createRazorpayLinkHandler({ params, set }: { params: { identifierId: string }; set: any }) {
+export async function createRazorpayLinkHandler({ params, set, headers }: { params: { identifierId: string }; set: any; headers?: any }) {
   const order = await orderRepository.findByIdentifier(params.identifierId);
   if (!order) {
     set.status = 404;
@@ -29,7 +29,23 @@ export async function createRazorpayLinkHandler({ params, set }: { params: { ide
     isForeign: order.isForeign,
   });
 
-  const checkoutBaseUrl = process.env.CHECKOUT_URL || 'http://localhost:3001';
+  let checkoutBaseUrl = process.env.CHECKOUT_URL;
+  if (!checkoutBaseUrl) {
+    const host = headers?.['host'] || '';
+    const origin = headers?.['origin'] || '';
+    const referer = headers?.['referer'] || '';
+    if (
+      process.env.VERCEL ||
+      process.env.NODE_ENV === 'production' ||
+      host.includes('vercel.app') ||
+      origin.includes('vercel.app') ||
+      referer.includes('vercel.app')
+    ) {
+      checkoutBaseUrl = 'https://portal-payu-yt.vercel.app';
+    } else {
+      checkoutBaseUrl = 'http://localhost:3001';
+    }
+  }
   const callbackUrl = `${checkoutBaseUrl}/pay/${order.identifierId}?status=success`;
 
   const link = await createRazorpayPaymentLink({

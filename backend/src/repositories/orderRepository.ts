@@ -26,6 +26,22 @@ export interface NewOrderRecord {
 }
 
 export class OrderRepository {
+  public async getNextOrderId(): Promise<string> {
+    const allOrders = await db.select({ id: orders.id }).from(orders);
+    let maxSeq = 0;
+    for (const o of allOrders) {
+      const match = o.id.match(/^ORD-(\d+)$/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxSeq) {
+          maxSeq = num;
+        }
+      }
+    }
+    const nextNum = maxSeq + 1;
+    return `ORD-${String(nextNum).padStart(4, '0')}`;
+  }
+
   public async createOrder(data: NewOrderRecord): Promise<typeof orders.$inferSelect> {
     const now = new Date();
 

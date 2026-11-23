@@ -3,6 +3,7 @@ import { cors } from '@elysiajs/cors';
 import { initializeDatabase } from './db/migrate';
 import {
   generateLinkHandler,
+  getNextOrderIdHandler,
   lookupOrderHandler,
   listOrdersHandler,
   retryOrderHandler,
@@ -57,6 +58,7 @@ export const app = new Elysia()
   .post('/api/admin/settings/test-razorpay', testRazorpayHandler)
   .post('/api/admin/settings/test-geocoding', testGeocodingHandler)
   .post('/api/orders/generate-link', generateLinkHandler)
+  .get('/api/orders/next-id', getNextOrderIdHandler)
   .get('/api/orders/:identifierId', lookupOrderHandler)
   .get('/api/admin/orders', listOrdersHandler)
   .post('/api/admin/orders/:id/retry', retryOrderHandler)
@@ -66,11 +68,16 @@ export const app = new Elysia()
   .post('/api/orders/:identifierId/razorpay-link', createRazorpayLinkHandler)
   .post('/api/orders/:identifierId/mark-upi-paid', markUpiPaidHandler)
   .patch('/api/admin/orders/:id/confirm-upi', confirmUpiHandler)
-  .post('/api/webhooks/razorpay', handleRazorpayWebhook)
-  .ws('/ws/admin', adminWebSocketHandler);
+  .post('/api/webhooks/razorpay', handleRazorpayWebhook);
+
+if (!process.env.VERCEL) {
+  app.ws('/ws/admin', adminWebSocketHandler);
+}
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   app.listen(port, () => {
     console.log(`Backend service running on http://localhost:${port}`);
   });
 }
+
+export default app;

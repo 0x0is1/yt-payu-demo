@@ -46,3 +46,4 @@ export async function getAdminMeHandler({ headers, set }: { headers: Record<stri
     user,
   };
 }
+

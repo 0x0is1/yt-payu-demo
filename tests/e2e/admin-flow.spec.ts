@@ -4,9 +4,10 @@ test.describe('Admin MFE Payment Link Generator & Dashboard', () => {
   let createdOrderId = '';
 
   test('admin can generate a payment link with GST and custom expiry', async ({ page }) => {
-    await page.goto('http://localhost:3000');
+    await page.goto('http://localhost:3000/login');
+    await page.click('button:has-text("Sign In as Administrator")');
 
-    await expect(page.locator('h1')).toContainText('Payment Request Generator');
+    await expect(page.locator('h1')).toContainText('Payment Request Generator', { timeout: 15000 });
 
     await page.fill('#amount', '2500');
     await page.selectOption('#gstRate', '18');
@@ -30,9 +31,12 @@ test.describe('Admin MFE Payment Link Generator & Dashboard', () => {
   });
 
   test('admin dashboard lists orders with live status and attempts', async ({ page }) => {
-    await page.goto('http://localhost:3000/orders');
+    await page.goto('http://localhost:3000/login');
+    await page.click('button:has-text("Sign In as Administrator")');
 
-    await expect(page.locator('h1')).toContainText('Payment Requests & Reconciliation');
+    await page.click('nav a:has-text("Requests")');
+
+    await expect(page.locator('h1')).toContainText('Payment Requests & Reconciliation', { timeout: 15000 });
     await expect(page.locator('table')).toBeVisible({ timeout: 15000 });
 
     await expect(page.locator('text=Anita Verma').first()).toBeVisible({ timeout: 15000 });

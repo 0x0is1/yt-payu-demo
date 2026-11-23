@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ interface GeneratorFormProps {
 
 export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
   const [amount, setAmount] = useState<string>('1000');
-  const [orderId, setOrderId] = useState<string>(() => generateRandomOrderId());
+  const [orderId, setOrderId] = useState<string>('');
   const [gstRate, setGstRate] = useState<number>(18);
   const [expiryMinutes, setExpiryMinutes] = useState<number>(1440);
   const [customerName, setCustomerName] = useState<string>('');
@@ -27,12 +27,27 @@ export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  function generateRandomOrderId() {
-    return `ORD-${Date.now().toString().slice(-6)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
-  }
+  const fetchNextOrderId = async () => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const res = await fetch(`${backendUrl}/api/orders/next-id`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.nextOrderId) {
+          setOrderId(data.nextOrderId);
+        }
+      }
+    } catch {
+      return;
+    }
+  };
+
+  useEffect(() => {
+    fetchNextOrderId();
+  }, []);
 
   const handleRefreshOrderId = () => {
-    setOrderId(generateRandomOrderId());
+    fetchNextOrderId();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

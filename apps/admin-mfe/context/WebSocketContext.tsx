@@ -29,15 +29,34 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
     const wsUrl = process.env.NEXT_PUBLIC_BACKEND_WS_URL || 'ws://localhost:4000/ws/admin';
     let timeoutId: any;
+    let pollInterval: any;
+    let wsActive = false;
+
+    async function checkHttpHealth() {
+      try {
+        const res = await fetch(`${backendUrl}/api/health`);
+        if (res.ok) {
+          setIsConnected(true);
+        } else {
+          if (!wsActive) setIsConnected(false);
+        }
+      } catch {
+        if (!wsActive) setIsConnected(false);
+      }
+    }
 
     function connect() {
+      if (typeof window === 'undefined') return;
+
       try {
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
+          wsActive = true;
           setIsConnected(true);
         };
 
@@ -51,24 +70,40 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         };
 
         ws.onclose = () => {
-          setIsConnected(false);
-          timeoutId = setTimeout(connect, 3000);
+          wsActive = false;
+          checkHttpHealth();
+          timeoutId = setTimeout(connect, 10000);
         };
 
         ws.onerror = () => {
-          ws.close();
+          wsActive = false;
+          checkHttpHealth();
+          try {
+            ws.close();
+          } catch {
+            return;
+          }
         };
       } catch {
-        timeoutId = setTimeout(connect, 3000);
+        wsActive = false;
+        checkHttpHealth();
+        timeoutId = setTimeout(connect, 10000);
       }
     }
 
+    checkHttpHealth();
+    pollInterval = setInterval(checkHttpHealth, 5000);
     connect();
 
     return () => {
       clearTimeout(timeoutId);
+      clearInterval(pollInterval);
       if (wsRef.current) {
-        wsRef.current.close();
+        try {
+          wsRef.current.close();
+        } catch {
+          return;
+        }
       }
     };
   }, []);

@@ -53,3 +53,4 @@ export async function testGeocodingHandler() {
   const result = await testGeocodingConnectivity();
   return result;
 }
+

@@ -3,7 +3,12 @@ import { calculatePricing } from '../services/taxEngine';
 import { generateOrderSchema } from '../validators/schemas';
 import { notificationService } from '../services/notificationService';
 
-export async function generateLinkHandler({ body, set }: { body: any; set: any }) {
+export async function getNextOrderIdHandler() {
+  const nextOrderId = await orderRepository.getNextOrderId();
+  return { success: true, nextOrderId };
+}
+
+export async function generateLinkHandler({ body, set, headers }: { body: any; set: any; headers?: any }) {
   const parseResult = generateOrderSchema.safeParse(body);
   if (!parseResult.success) {
     set.status = 400;
@@ -11,7 +16,7 @@ export async function generateLinkHandler({ body, set }: { body: any; set: any }
   }
 
   const data = parseResult.data;
-  const orderId = data.orderId || `ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const orderId = (data.orderId && data.orderId.trim()) ? data.orderId.trim() : await orderRepository.getNextOrderId();
   const identifierId = `pay_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
 
   const pricing = calculatePricing({
@@ -54,7 +59,23 @@ export async function generateLinkHandler({ body, set }: { body: any; set: any }
     timestamp: new Date().toISOString(),
   });
 
-  const checkoutBaseUrl = process.env.CHECKOUT_URL || 'http://localhost:3001';
+  let checkoutBaseUrl = process.env.CHECKOUT_URL;
+  if (!checkoutBaseUrl) {
+    const host = headers?.['host'] || '';
+    const origin = headers?.['origin'] || '';
+    const referer = headers?.['referer'] || '';
+    if (
+      process.env.VERCEL ||
+      process.env.NODE_ENV === 'production' ||
+      host.includes('vercel.app') ||
+      origin.includes('vercel.app') ||
+      referer.includes('vercel.app')
+    ) {
+      checkoutBaseUrl = 'https://portal-payu-yt.vercel.app';
+    } else {
+      checkoutBaseUrl = 'http://localhost:3001';
+    }
+  }
   const paymentLink = `${checkoutBaseUrl}/pay/${identifierId}`;
 
   return {

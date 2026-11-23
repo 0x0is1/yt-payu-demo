@@ -105,7 +105,10 @@ export function OrdersTable({
                 const isExpired =
                   new Date(order.expiresAt).getTime() < Date.now() && order.status === 'pending';
                 const checkoutBaseUrl =
-                  process.env.NEXT_PUBLIC_CHECKOUT_URL || 'http://localhost:3001';
+                  process.env.NEXT_PUBLIC_CHECKOUT_URL ||
+                  (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+                    ? 'https://portal-payu-yt.vercel.app'
+                    : 'http://localhost:3001');
                 const payUrl = `${checkoutBaseUrl}/pay/${order.identifierId}`;
 
                 return (

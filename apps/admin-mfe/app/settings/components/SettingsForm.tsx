@@ -242,3 +242,4 @@ export function SettingsForm({ onSettingsChange }: SettingsFormProps) {
     </Card>
   );
 }
+
