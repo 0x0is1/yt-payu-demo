@@ -26,7 +26,7 @@ export async function resolveCoordinatesToState(latitude: number, longitude: num
       return fallbackResult;
     }
 
-    const data = await res.json();
+    const data: any = await res.json();
     const address = data?.address || {};
     const state = address.state || address.province || address.region || fallbackResult.state;
     const country = address.country || fallbackResult.country;

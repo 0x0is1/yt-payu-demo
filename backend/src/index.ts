@@ -69,7 +69,7 @@ export const app = new Elysia()
   .post('/api/webhooks/razorpay', handleRazorpayWebhook)
   .ws('/ws/admin', adminWebSocketHandler);
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   app.listen(port, () => {
     console.log(`Backend service running on http://localhost:${port}`);
   });

@@ -1,5 +1,6 @@
 {
   "name": "backend-payu-yt",
+  "bunVersion": "1.x",
   "rewrites": [
     {
       "source": "/(.*)",

@@ -4,9 +4,10 @@ import * as schema from './schema';
 import { existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 
-const dbPath = process.env.DATABASE_URL || 'data/payu.sqlite';
+const defaultDbPath = process.env.VERCEL ? '/tmp/payu.sqlite' : 'data/payu.sqlite';
+const dbPath = process.env.DATABASE_URL || defaultDbPath;
 const dbDir = dirname(dbPath);
-if (!existsSync(dbDir)) {
+if (dbDir && dbDir !== '.' && !existsSync(dbDir)) {
   mkdirSync(dbDir, { recursive: true });
 }
 

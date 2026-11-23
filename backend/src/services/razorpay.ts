@@ -68,7 +68,7 @@ export async function createRazorpayPaymentLink(params: CreateLinkParams): Promi
     body: JSON.stringify(payload),
   });
 
-  const data = await res.json();
+  const data: any = await res.json();
   if (!res.ok) {
     throw new Error(data?.error?.description || `Razorpay API error (${res.status})`);
   }
