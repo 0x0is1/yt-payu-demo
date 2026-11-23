@@ -6,6 +6,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAdminOrders, OrderItem } from '@/context/AdminOrdersContext';
 import { OrdersTable } from './components/OrdersTable';
 import { ConfirmUpiModal } from './components/ConfirmUpiModal';
+import { ConfirmBankModal } from './components/ConfirmBankModal';
 import { AttemptsModal } from './components/AttemptsModal';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,8 +14,9 @@ import { Lock } from 'lucide-react';
 
 export default function AdminOrdersDashboardPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const { orders, loading, fetchOrders, retryOrder, confirmUpi } = useAdminOrders();
+  const { orders, loading, fetchOrders, retryOrder, confirmUpi, confirmBank } = useAdminOrders();
   const [selectedForUpi, setSelectedForUpi] = useState<OrderItem | null>(null);
+  const [selectedForBank, setSelectedForBank] = useState<OrderItem | null>(null);
   const [selectedForAttempts, setSelectedForAttempts] = useState<OrderItem | null>(null);
 
   if (authLoading) {
@@ -55,7 +57,7 @@ export default function AdminOrdersDashboardPage() {
           Payment Requests & Reconciliation
         </h1>
         <p className="text-sm text-slate-500">
-          Live feed of created orders, customer payment attempts across platforms, UPI receipts, and link expiry status.
+          Live feed of created orders, program duration, UPI & bank receipts, and link expiry status.
         </p>
       </div>
 
@@ -65,6 +67,7 @@ export default function AdminOrdersDashboardPage() {
         onRefresh={fetchOrders}
         onRetry={retryOrder}
         onOpenConfirmUpi={(order) => setSelectedForUpi(order)}
+        onOpenConfirmBank={(order) => setSelectedForBank(order)}
         onOpenAttempts={(order) => setSelectedForAttempts(order)}
       />
 
@@ -73,6 +76,13 @@ export default function AdminOrdersDashboardPage() {
         order={selectedForUpi}
         onClose={() => setSelectedForUpi(null)}
         onConfirm={confirmUpi}
+      />
+
+      <ConfirmBankModal
+        isOpen={Boolean(selectedForBank)}
+        order={selectedForBank}
+        onClose={() => setSelectedForBank(null)}
+        onConfirm={confirmBank}
       />
 
       <AttemptsModal

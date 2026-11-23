@@ -5,41 +5,64 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useCheckoutSession } from '@/context/CheckoutContext';
-import { ArrowRight, User } from 'lucide-react';
+import { useGeolocationState } from '@/context/GeolocationContext';
+import { ArrowRight, User, Sparkles } from 'lucide-react';
 
 export function CustomerPrefillForm() {
   const { order, setStep } = useCheckoutSession();
+  const { requestPermission } = useGeolocationState();
   const [name, setName] = useState(order?.customerName || '');
   const [email, setEmail] = useState(order?.customerEmail || '');
   const [phone, setPhone] = useState(order?.customerPhone || '');
   const [error, setError] = useState<string | null>(null);
 
-  const handleNext = (e: React.FormEvent) => {
+  const handleNext = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError('Please enter your full name to proceed');
       return;
     }
+    requestPermission().catch(() => {});
     setStep('location_gate');
   };
 
+  const isTrial = order?.isFreeTrial || order?.baseAmount === 0;
+
   return (
-    <Card className="border border-gold-600 bg-white">
+    <Card className="border border-gold-600 bg-white shadow-sm">
       <CardHeader>
-        <div className="flex items-center space-x-2">
-          <div className="h-8 w-8 rounded-full bg-amber-100 text-gold-700 flex items-center justify-center">
-            <User className="h-4 w-4" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="h-8 w-8 rounded-full bg-amber-100 text-gold-700 flex items-center justify-center">
+              <User className="h-4 w-4" />
+            </div>
+            <div>
+              <CardTitle>Member Registration</CardTitle>
+              <CardDescription>
+                Please enter your details to proceed with enrollment and tax calculation.
+              </CardDescription>
+            </div>
           </div>
-          <div>
-            <CardTitle>Customer Information</CardTitle>
-            <CardDescription>
-              Please enter your contact details before proceeding to payment.
-            </CardDescription>
-          </div>
+          <Badge variant={isTrial ? 'orange' : 'gold'}>
+            {order?.programDuration || '1 Month'}
+          </Badge>
         </div>
       </CardHeader>
       <CardContent>
+        <div className="mb-4 rounded-lg bg-amber-50 border border-gold-600 p-3 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="h-4 w-4 text-gold-600" />
+            <span className="text-xs font-semibold text-slate-800">
+              {isTrial ? 'Free Trial Enrollment' : `Selected Program: ${order?.programDuration || 'Standard'}`}
+            </span>
+          </div>
+          <span className="text-xs font-bold text-gold-700">
+            {isTrial ? 'Free of Cost' : `INR ${(order?.baseAmount || 0).toFixed(2)}`}
+          </span>
+        </div>
+
         <form onSubmit={handleNext} className="space-y-4">
           {error && (
             <div className="rounded bg-red-50 p-2.5 text-xs text-red-700 border border-red-200">
@@ -53,24 +76,25 @@ export function CustomerPrefillForm() {
               id="custName"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. John Doe"
+              placeholder="e.g. Rahul Sharma"
               required
+              autoFocus
             />
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="custEmail">Email Address</Label>
+            <Label htmlFor="custEmail">Email Address (Optional)</Label>
             <Input
               id="custEmail"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="john@example.com"
+              placeholder="rahul@example.com"
             />
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="custPhone">Phone Number</Label>
+            <Label htmlFor="custPhone">Phone Number (Optional)</Label>
             <Input
               id="custPhone"
               value={phone}

@@ -20,6 +20,7 @@ export async function calculatePricingHandler({ params, body, set }: { params: {
   const pricing = calculatePricing({
     baseAmount: order.baseAmount,
     gstRate: order.gstRate,
+    isFreeTrial: order.isFreeTrial,
     customerState: data.state || order.state,
     customerCountry: data.country || order.country,
     isForeign: data.isForeign,
@@ -59,6 +60,7 @@ export async function submitCustomerDetailsHandler({ params, body, set }: { para
   const pricing = calculatePricing({
     baseAmount: order.baseAmount,
     gstRate: order.gstRate,
+    isFreeTrial: order.isFreeTrial,
     customerState: data.state,
     customerCountry: data.country,
     isForeign: data.isForeign,
@@ -70,7 +72,7 @@ export async function submitCustomerDetailsHandler({ params, body, set }: { para
     customerPhone: data.customerPhone,
     addressLine: data.addressLine,
     city: data.city,
-    state: data.state,
+    state: data.state || 'Karnataka',
     country: data.country,
     isForeign: pricing.isForeign,
     nationality: data.nationality,

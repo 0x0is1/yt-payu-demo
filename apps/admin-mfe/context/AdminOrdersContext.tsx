@@ -16,6 +16,8 @@ export interface OrderItem {
   id: string;
   identifierId: string;
   baseAmount: number;
+  programDuration?: string;
+  isFreeTrial?: boolean;
   gstRate: number;
   cgst: number;
   sgst: number;
@@ -39,7 +41,10 @@ export interface OrderItem {
   upiTransactionId?: string | null;
   upiMarkedPaidAt?: string | null;
   upiConfirmedAt?: string | null;
-  expiresAt: string;
+  bankReferenceId?: string | null;
+  bankMarkedPaidAt?: string | null;
+  bankConfirmedAt?: string | null;
+  expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
   attempts: PaymentAttempt[];
@@ -52,6 +57,7 @@ interface AdminOrdersContextType {
   fetchOrders: () => Promise<void>;
   retryOrder: (orderId: string, expiryMinutes?: number) => Promise<boolean>;
   confirmUpi: (orderId: string, upiTransactionId: string) => Promise<boolean>;
+  confirmBank: (orderId: string, bankReferenceId: string) => Promise<boolean>;
 }
 
 const AdminOrdersContext = createContext<AdminOrdersContextType | undefined>(undefined);
@@ -131,6 +137,25 @@ export function AdminOrdersProvider({ children }: { children: React.ReactNode })
     }
   };
 
+  const confirmBank = async (orderId: string, bankReferenceId: string): Promise<boolean> => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const res = await fetch(`${backendUrl}/api/admin/orders/${orderId}/confirm-bank`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bankReferenceId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchOrders();
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <AdminOrdersContext.Provider
       value={{
@@ -140,6 +165,7 @@ export function AdminOrdersProvider({ children }: { children: React.ReactNode })
         fetchOrders,
         retryOrder,
         confirmUpi,
+        confirmBank,
       }}
     >
       {children}

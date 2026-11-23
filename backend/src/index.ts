@@ -17,6 +17,9 @@ import {
   createRazorpayLinkHandler,
   markUpiPaidHandler,
   confirmUpiHandler,
+  markBankPaidHandler,
+  confirmBankHandler,
+  activateFreeTrialHandler,
   verifyRazorpayPaymentHandler,
 } from './controllers/paymentController';
 import { handleRazorpayWebhook } from './controllers/webhookController';
@@ -28,9 +31,10 @@ import {
   testRazorpayHandler,
   testGeocodingHandler,
 } from './controllers/settingsController';
-import { getMerchantSettings } from './services/settingsService';
+import { getMerchantSettings, loadMerchantSettings } from './services/settingsService';
 
-initializeDatabase();
+await initializeDatabase();
+await loadMerchantSettings();
 
 const port = Number(process.env.PORT) || 4000;
 
@@ -50,6 +54,10 @@ export const app = new Elysia()
       merchantUpiId: settings.merchantUpiId,
       merchantState: settings.merchantState,
       merchantName: settings.merchantName,
+      bankAccountNumber: settings.bankAccountNumber,
+      bankIfsc: settings.bankIfsc,
+      bankAccountName: settings.bankAccountName,
+      bankName: settings.bankName,
     };
   })
   .post('/api/admin/login', loginAdminHandler)
@@ -70,6 +78,9 @@ export const app = new Elysia()
   .post('/api/orders/:identifierId/verify-razorpay', verifyRazorpayPaymentHandler)
   .post('/api/orders/:identifierId/mark-upi-paid', markUpiPaidHandler)
   .patch('/api/admin/orders/:id/confirm-upi', confirmUpiHandler)
+  .post('/api/orders/:identifierId/mark-bank-paid', markBankPaidHandler)
+  .patch('/api/admin/orders/:id/confirm-bank', confirmBankHandler)
+  .post('/api/orders/:identifierId/activate-trial', activateFreeTrialHandler)
   .post('/api/webhooks/razorpay', handleRazorpayWebhook);
 
 if (!process.env.VERCEL) {

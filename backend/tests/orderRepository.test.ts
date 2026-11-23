@@ -6,8 +6,8 @@ import { orders } from '../src/db/schema';
 import { eq } from 'drizzle-orm';
 
 describe('Order Repository with ACID Transactions', () => {
-  beforeAll(() => {
-    initializeDatabase();
+  beforeAll(async () => {
+    await initializeDatabase();
   });
 
   it('creates an order atomically within an ACID transaction', async () => {
@@ -18,6 +18,7 @@ describe('Order Repository with ACID Transactions', () => {
       id: orderId,
       identifierId,
       baseAmount: 1000,
+      programDuration: '1 Month',
       gstRate: 18,
       cgst: 90,
       sgst: 90,
@@ -39,32 +40,30 @@ describe('Order Repository with ACID Transactions', () => {
     expect(fetched?.totalAmount).toBe(1180);
   });
 
-  it('atomically rolls back a transaction using tx.rollback()', () => {
+  it('atomically rolls back a transaction on error', async () => {
     const doomedId = `doomed_${Date.now()}`;
     let rolledBack = false;
 
     try {
-      db.transaction((tx) => {
-        tx.insert(orders)
-          .values({
-            id: doomedId,
-            identifierId: doomedId,
-            baseAmount: 500,
-            totalAmount: 590,
-            status: 'pending',
-            expiresAt: new Date(),
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .run();
-        tx.rollback();
+      await db.transaction(async (tx) => {
+        await tx.insert(orders).values({
+          id: doomedId,
+          identifierId: doomedId,
+          baseAmount: 500,
+          totalAmount: 590,
+          status: 'pending',
+          expiresAt: new Date(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+        throw new Error('Simulated atomic transaction abort');
       });
     } catch {
       rolledBack = true;
     }
 
     expect(rolledBack).toBe(true);
-    const lookup = db.select().from(orders).where(eq(orders.id, doomedId)).all();
+    const lookup = await db.select().from(orders).where(eq(orders.id, doomedId));
     expect(lookup.length).toBe(0);
   });
 
@@ -123,13 +122,40 @@ describe('Order Repository with ACID Transactions', () => {
 
     const claimed = await orderRepository.markUpiPaid(identifier);
     expect(claimed?.status).toBe('upi_claimed');
-    expect(claimed?.paymentMethod).toBe('manual_upi');
+    expect(claimed?.paymentMethod).toBe('upi');
     expect(claimed?.upiMarkedPaidAt).toBeDefined();
 
     const confirmed = await orderRepository.confirmUpiPayment(id, 'UPI_TXN_998877');
     expect(confirmed?.status).toBe('paid');
     expect(confirmed?.upiTransactionId).toBe('UPI_TXN_998877');
     expect(confirmed?.upiConfirmedAt).toBeDefined();
+  });
+
+  it('atomically marks payment as bank claimed and records payment attempt', async () => {
+    const id = `test_bank_${Date.now()}`;
+    const identifier = `test_pay_bank_${Date.now()}`;
+
+    await orderRepository.createOrder({
+      id,
+      identifierId: identifier,
+      baseAmount: 2500,
+      gstRate: 18,
+      cgst: 225,
+      sgst: 225,
+      igst: 0,
+      totalAmount: 2950,
+      expiresAt: null,
+    });
+
+    const claimed = await orderRepository.markBankPaid(identifier, 'REF_BANK_554433');
+    expect(claimed?.status).toBe('bank_claimed');
+    expect(claimed?.paymentMethod).toBe('bank_transfer');
+    expect(claimed?.bankMarkedPaidAt).toBeDefined();
+
+    const confirmed = await orderRepository.confirmBankPayment(id, 'REF_BANK_554433');
+    expect(confirmed?.status).toBe('paid');
+    expect(confirmed?.bankReferenceId).toBe('REF_BANK_554433');
+    expect(confirmed?.bankConfirmedAt).toBeDefined();
   });
 
   it('atomically extends expiry date on retry', async () => {
@@ -150,6 +176,6 @@ describe('Order Repository with ACID Transactions', () => {
 
     const retried = await orderRepository.retryOrder(id, 1440);
     expect(retried?.status).toBe('pending');
-    expect(new Date(retried!.expiresAt).getTime()).toBeGreaterThan(Date.now());
+    expect(new Date(retried!.expiresAt!).getTime()).toBeGreaterThan(Date.now());
   });
 });

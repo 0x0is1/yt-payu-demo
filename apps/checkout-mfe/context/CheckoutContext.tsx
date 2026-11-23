@@ -7,6 +7,8 @@ export interface OrderData {
   id: string;
   identifierId: string;
   baseAmount: number;
+  programDuration?: string;
+  isFreeTrial?: boolean;
   gstRate: number;
   cgst: number;
   sgst: number;
@@ -28,7 +30,8 @@ export interface OrderData {
   razorpayPaymentId?: string | null;
   razorpayFee?: number | null;
   upiTransactionId?: string | null;
-  expiresAt: string;
+  bankReferenceId?: string | null;
+  expiresAt?: string | null;
 }
 
 export interface PricingData {
@@ -41,8 +44,16 @@ export interface PricingData {
   razorpayFee: number;
   razorpayTotal: number;
   isForeign: boolean;
+  isFreeTrial: boolean;
   taxType: string;
-  availableMethods: ('razorpay' | 'manual_upi')[];
+  availableMethods: ('razorpay' | 'upi' | 'bank_transfer')[];
+}
+
+export interface RazorpaySessionResult {
+  orderId?: string;
+  keyId?: string;
+  amount?: number;
+  paymentLinkUrl?: string;
 }
 
 export type CheckoutStep =
@@ -52,6 +63,7 @@ export type CheckoutStep =
   | 'location_gate'
   | 'address_review'
   | 'payment_selection'
+  | 'verifying_payment'
   | 'success';
 
 interface CheckoutContextType {
@@ -61,14 +73,22 @@ interface CheckoutContextType {
   step: CheckoutStep;
   merchantUpiId: string;
   merchantState: string;
+  bankAccountNumber: string;
+  bankIfsc: string;
+  bankAccountName: string;
+  bankName: string;
   loading: boolean;
   error: string | null;
+  verificationError: string | null;
   setStep: (step: CheckoutStep) => void;
   fetchOrder: () => Promise<void>;
   updatePricing: (state?: string, country?: string, isForeign?: boolean) => Promise<void>;
   submitCustomer: (data: any) => Promise<boolean>;
-  initiateRazorpayPayment: () => Promise<string | null>;
+  initiateRazorpayPayment: () => Promise<RazorpaySessionResult>;
+  verifyRazorpayPayment: (paymentIdParam?: string, orderIdParam?: string, signatureParam?: string) => Promise<boolean>;
   submitUpiPaid: () => Promise<boolean>;
+  submitBankPaid: (bankReferenceId?: string) => Promise<boolean>;
+  activateTrial: () => Promise<boolean>;
 }
 
 const CheckoutContext = createContext<CheckoutContextType | undefined>(undefined);
@@ -85,8 +105,13 @@ export function CheckoutProvider({
   const [step, setStep] = useState<CheckoutStep>('loading');
   const [merchantUpiId, setMerchantUpiId] = useState<string>('payu-demo@okhdfcbank');
   const [merchantState, setMerchantState] = useState<string>('Karnataka');
+  const [bankAccountNumber, setBankAccountNumber] = useState<string>('919876543210');
+  const [bankIfsc, setBankIfsc] = useState<string>('HDFC0001234');
+  const [bankAccountName, setBankAccountName] = useState<string>('PayU Merchant Store Private Limited');
+  const [bankName, setBankName] = useState<string>('HDFC Bank');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
 
   const { status: geoStatus, location } = useGeolocationState();
 
@@ -97,6 +122,10 @@ export function CheckoutProvider({
       const data = await res.json();
       if (data.merchantUpiId) setMerchantUpiId(data.merchantUpiId);
       if (data.merchantState) setMerchantState(data.merchantState);
+      if (data.bankAccountNumber) setBankAccountNumber(data.bankAccountNumber);
+      if (data.bankIfsc) setBankIfsc(data.bankIfsc);
+      if (data.bankAccountName) setBankAccountName(data.bankAccountName);
+      if (data.bankName) setBankName(data.bankName);
     } catch {}
   }, []);
 
@@ -141,16 +170,32 @@ export function CheckoutProvider({
       const fetchedOrder: OrderData = data.order;
       setOrder(fetchedOrder);
 
-      if (data.isExpired || fetchedOrder.status === 'expired') {
+      if (fetchedOrder.status === 'paid') {
+        setStep('success');
+        setLoading(false);
+        return;
+      }
+
+      const isExpired = fetchedOrder.expiresAt
+        ? new Date(fetchedOrder.expiresAt).getTime() < Date.now()
+        : false;
+
+      if (data.isExpired || isExpired || fetchedOrder.status === 'expired') {
         setStep('expired');
         setLoading(false);
         return;
       }
 
-      if (fetchedOrder.status === 'paid') {
-        setStep('success');
-        setLoading(false);
-        return;
+      if (typeof window !== 'undefined') {
+        const urlParams = new URLSearchParams(window.location.search);
+        const hasPaymentParams =
+          urlParams.get('status') === 'success' ||
+          Boolean(urlParams.get('razorpay_payment_id')) ||
+          urlParams.get('razorpay_payment_link_status') === 'paid';
+        if (hasPaymentParams) {
+          setLoading(false);
+          return;
+        }
       }
 
       await updatePricing(fetchedOrder.state || undefined, fetchedOrder.country || undefined, fetchedOrder.isForeign || false);
@@ -173,22 +218,68 @@ export function CheckoutProvider({
     fetchOrder();
   }, [fetchConfig, fetchOrder]);
 
+  const verifyRazorpayPayment = useCallback(
+    async (paymentIdParam?: string, orderIdParam?: string, signatureParam?: string): Promise<boolean> => {
+      try {
+        setVerificationError(null);
+        setStep('verifying_payment');
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+        const res = await fetch(`${backendUrl}/api/orders/${identifierId}/verify-razorpay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paymentId: paymentIdParam || undefined,
+            orderId: orderIdParam || undefined,
+            signature: signatureParam || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (data.success && data.order && data.order.status === 'paid') {
+          setOrder(data.order);
+          setStep('success');
+          if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', window.location.pathname);
+          }
+          return true;
+        }
+
+        for (let attempt = 1; attempt <= 4; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          const checkRes = await fetch(`${backendUrl}/api/orders/${identifierId}`);
+          const checkData = await checkRes.json();
+          if (checkData.success && checkData.order && checkData.order.status === 'paid') {
+            setOrder(checkData.order);
+            setStep('success');
+            if (typeof window !== 'undefined') {
+              window.history.replaceState({}, '', window.location.pathname);
+            }
+            return true;
+          }
+        }
+
+        setVerificationError('Gateway verification is pending. If money was debited, your enrollment will be confirmed shortly.');
+        return false;
+      } catch (err: any) {
+        setVerificationError(err.message || 'Error communicating with verification gateway');
+        return false;
+      }
+    },
+    [identifierId]
+  );
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const isSuccess = urlParams.get('status') === 'success';
       const paymentId = urlParams.get('razorpay_payment_id');
-      if (isSuccess || paymentId) {
-        setStep('success');
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
-        fetch(`${backendUrl}/api/orders/${identifierId}/verify-razorpay`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ paymentId: paymentId || undefined }),
-        }).catch(() => {});
+      const orderId = urlParams.get('razorpay_order_id');
+      const signature = urlParams.get('razorpay_signature');
+      const linkStatus = urlParams.get('razorpay_payment_link_status');
+      if (isSuccess || paymentId || linkStatus === 'paid') {
+        verifyRazorpayPayment(paymentId || undefined, orderId || undefined, signature || undefined);
       }
     }
-  }, [identifierId]);
+  }, [identifierId, verifyRazorpayPayment]);
 
   useEffect(() => {
     if (step === 'location_gate' && geoStatus === 'granted' && location) {
@@ -217,15 +308,20 @@ export function CheckoutProvider({
     }
   };
 
-  const initiateRazorpayPayment = async (): Promise<string | null> => {
+  const initiateRazorpayPayment = async (): Promise<RazorpaySessionResult> => {
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
       const res = await fetch(`${backendUrl}/api/orders/${identifierId}/razorpay-link`, {
         method: 'POST',
       });
       const data = await res.json();
-      if (data.success && data.paymentLinkUrl) {
-        return data.paymentLinkUrl;
+      if (data.success) {
+        return {
+          orderId: data.orderId,
+          keyId: data.keyId,
+          amount: data.amount,
+          paymentLinkUrl: data.paymentLinkUrl,
+        };
       }
       throw new Error(data?.error || 'Failed to initialize Razorpay checkout session');
     } catch (err: any) {
@@ -241,6 +337,45 @@ export function CheckoutProvider({
       });
       const data = await res.json();
       if (data.success) {
+        if (data.order) setOrder(data.order);
+        setStep('success');
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const submitBankPaid = async (bankReferenceId?: string): Promise<boolean> => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const res = await fetch(`${backendUrl}/api/orders/${identifierId}/mark-bank-paid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bankReferenceId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.order) setOrder(data.order);
+        setStep('success');
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  const activateTrial = async (): Promise<boolean> => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+      const res = await fetch(`${backendUrl}/api/orders/${identifierId}/activate-trial`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.order) setOrder(data.order);
         setStep('success');
         return true;
       }
@@ -259,14 +394,22 @@ export function CheckoutProvider({
         step,
         merchantUpiId,
         merchantState,
+        bankAccountNumber,
+        bankIfsc,
+        bankAccountName,
+        bankName,
         loading,
         error,
+        verificationError,
         setStep,
         fetchOrder,
         updatePricing,
         submitCustomer,
         initiateRazorpayPayment,
+        verifyRazorpayPayment,
         submitUpiPaid,
+        submitBankPaid,
+        activateTrial,
       }}
     >
       {children}

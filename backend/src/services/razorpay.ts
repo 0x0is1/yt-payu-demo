@@ -81,6 +81,61 @@ export async function createRazorpayPaymentLink(params: CreateLinkParams): Promi
   };
 }
 
+export interface CreateOrderParams {
+  amountRupees: number;
+  receipt: string;
+  notes?: Record<string, string>;
+}
+
+export interface CreatedOrderResult {
+  id: string;
+  amount: number;
+  currency: string;
+  receipt: string;
+  status: string;
+}
+
+export async function createRazorpayOrder(params: CreateOrderParams): Promise<CreatedOrderResult> {
+  const payload = {
+    amount: Math.round(params.amountRupees * 100),
+    currency: 'INR',
+    receipt: params.receipt,
+    notes: params.notes || {},
+  };
+
+  const res = await fetch(`${RAZORPAY_API_BASE}/orders`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: getAuthHeader(),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data: any = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.error?.description || `Razorpay API error (${res.status})`);
+  }
+
+  return {
+    id: data.id,
+    amount: data.amount,
+    currency: data.currency,
+    receipt: data.receipt,
+    status: data.status,
+  };
+}
+
+export function verifyRazorpayPaymentSignature(orderId: string, paymentId: string, signature: string): boolean {
+  const config = getMerchantSettings();
+  const secret = config.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+  if (!secret) {
+    return false;
+  }
+  const expected = createHmac('sha256', secret).update(`${orderId}|${paymentId}`).digest('hex');
+  return expected === signature;
+}
+
 export function verifyWebhookSignature(rawBody: string, signature: string): boolean {
   const config = getMerchantSettings();
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET || config.razorpayWebhookSecret;

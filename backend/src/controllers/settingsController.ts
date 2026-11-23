@@ -24,7 +24,7 @@ export async function updateSettingsHandler({ body, set }: { body: unknown; set:
     };
   }
 
-  const updated = updateMerchantSettings(parsed.data);
+  const updated = await updateMerchantSettings(parsed.data);
   return {
     success: true,
     settings: updated,

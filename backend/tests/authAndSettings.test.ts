@@ -6,9 +6,9 @@ import { merchantSettings } from '../src/db/schema';
 import { eq } from 'drizzle-orm';
 import { updateMerchantSettings } from '../src/services/settingsService';
 
-beforeAll(() => {
-  initializeDatabase();
-  updateMerchantSettings({
+beforeAll(async () => {
+  await initializeDatabase();
+  await updateMerchantSettings({
     merchantName: 'PayU Merchant Store',
     merchantUpiId: 'payu-demo@okhdfcbank',
     merchantState: 'Karnataka',
@@ -16,8 +16,8 @@ beforeAll(() => {
   });
 });
 
-afterAll(() => {
-  updateMerchantSettings({
+afterAll(async () => {
+  await updateMerchantSettings({
     merchantName: 'PayU Merchant Store',
     merchantUpiId: 'payu-demo@okhdfcbank',
     merchantState: 'Karnataka',
@@ -128,13 +128,13 @@ describe('Admin Authentication & Merchant Settings', () => {
     expect(body.settings.merchantState).toBe('Maharashtra');
     expect(body.settings.defaultGstRate).toBe(5);
 
-    const saved = db
+    const saved = await db
       .select()
       .from(merchantSettings)
       .where(eq(merchantSettings.id, 'default'))
-      .get();
-    expect(saved?.merchantState).toBe('Maharashtra');
-    expect(saved?.merchantUpiId).toBe('acme.store@okhdfcbank');
+      .limit(1);
+    expect(saved[0]?.merchantState).toBe('Maharashtra');
+    expect(saved[0]?.merchantUpiId).toBe('acme.store@okhdfcbank');
   });
 
   it('tests Razorpay credentials endpoint', async () => {

@@ -12,6 +12,7 @@ This project implements a distributed payment generation and checkout architectu
 | **Stage 3** | [03-admin-mfe.md](./03-admin-mfe.md) | Admin MFE (:3000), Order ID generator, Dashboard, Manual UPI confirmation modal | Finalized |
 | **Stage 4** | [04-checkout-mfe.md](./04-checkout-mfe.md) | Checkout MFE (:3001), Geolocation gate, State resolution, Dual payment options (Razorpay & UPI) | Finalized |
 | **Stage 5** | [05-testing-and-verification.md](./05-testing-and-verification.md) | Playwright E2E suites (`*.spec.ts`), visual inspection, zero portaling & zero gradient audits | Finalized |
+| **Stage 6** | [06-postgres-and-flow-revamp.md](./06-postgres-and-flow-revamp.md) | PostgreSQL migration, admin duration & no-expiry, member location capture, Indian UPI + Bank, International Razorpay | Finalized |
 
 ## Core Principles Checklist
 - [x] **Zero Comments in Code**: Strictly no comments in any code files.

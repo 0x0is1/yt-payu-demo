@@ -6,6 +6,10 @@ import { resolveCoordinatesToState } from './geocoding';
 export interface MerchantConfig {
   merchantName: string;
   merchantUpiId: string;
+  bankAccountNumber: string;
+  bankIfsc: string;
+  bankAccountName: string;
+  bankName: string;
   merchantState: string;
   razorpayKeyId: string;
   razorpayKeySecret: string;
@@ -14,60 +18,87 @@ export interface MerchantConfig {
   updatedAt: number;
 }
 
-export function getMerchantSettings(): MerchantConfig {
-  const row = db
-    .select()
-    .from(merchantSettings)
-    .where(eq(merchantSettings.id, 'default'))
-    .get();
+let cachedSettings: MerchantConfig = {
+  merchantName: process.env.MERCHANT_NAME || 'PayU Merchant Store',
+  merchantUpiId: process.env.MERCHANT_UPI_ID || 'payu-demo@okhdfcbank',
+  bankAccountNumber: process.env.BANK_ACCOUNT_NUMBER || '919876543210',
+  bankIfsc: process.env.BANK_IFSC || 'HDFC0001234',
+  bankAccountName: process.env.BANK_ACCOUNT_NAME || 'PayU Merchant Store Private Limited',
+  bankName: process.env.BANK_NAME || 'HDFC Bank',
+  merchantState: process.env.MERCHANT_STATE || 'Karnataka',
+  razorpayKeyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_2xGYyaqTbp0HNw',
+  razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || 'Bj7via42B9PX6GS38kQM6fVq',
+  razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'rzp_test_whsec_987654321',
+  defaultGstRate: 18.0,
+  updatedAt: Date.now(),
+};
 
-  if (!row) {
-    return {
-      merchantName: process.env.MERCHANT_NAME || 'PayU Merchant Store',
-      merchantUpiId: process.env.MERCHANT_UPI_ID || 'payu-demo@okhdfcbank',
-      merchantState: process.env.MERCHANT_STATE || 'Karnataka',
-      razorpayKeyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_2xGYyaqTbp0HNw',
-      razorpayKeySecret: process.env.RAZORPAY_KEY_SECRET || 'Bj7via42B9PX6GS38kQM6fVq',
-      razorpayWebhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET || 'rzp_webhook_secret_key',
-      defaultGstRate: 18.0,
-      updatedAt: Date.now(),
-    };
-  }
-
-  return {
-    merchantName: row.merchantName,
-    merchantUpiId: row.merchantUpiId,
-    merchantState: row.merchantState,
-    razorpayKeyId: row.razorpayKeyId,
-    razorpayKeySecret: row.razorpayKeySecret,
-    razorpayWebhookSecret: row.razorpayWebhookSecret,
-    defaultGstRate: row.defaultGstRate,
-    updatedAt: row.updatedAt.getTime(),
-  };
-}
-
-export function updateMerchantSettings(updates: Partial<MerchantConfig>): MerchantConfig {
-  return db.transaction((tx) => {
-    const current = tx
+export async function loadMerchantSettings(): Promise<MerchantConfig> {
+  try {
+    const rows = await db
       .select()
       .from(merchantSettings)
       .where(eq(merchantSettings.id, 'default'))
-      .get();
+      .limit(1);
 
-    const newName = updates.merchantName ?? current?.merchantName ?? 'PayU Merchant Store';
-    const newUpiId = updates.merchantUpiId ?? current?.merchantUpiId ?? 'payu-demo@okhdfcbank';
-    const newState = updates.merchantState ?? current?.merchantState ?? 'Karnataka';
-    const newKeyId = updates.razorpayKeyId ?? current?.razorpayKeyId ?? 'rzp_test_2xGYyaqTbp0HNw';
-    const newKeySecret = updates.razorpayKeySecret ?? current?.razorpayKeySecret ?? 'Bj7via42B9PX6GS38kQM6fVq';
-    const newWebhookSecret = updates.razorpayWebhookSecret ?? current?.razorpayWebhookSecret ?? 'rzp_webhook_secret_key';
-    const newGstRate = updates.defaultGstRate ?? current?.defaultGstRate ?? 18.0;
-    const now = new Date();
+    if (rows[0]) {
+      cachedSettings = {
+        merchantName: rows[0].merchantName,
+        merchantUpiId: rows[0].merchantUpiId,
+        bankAccountNumber: rows[0].bankAccountNumber,
+        bankIfsc: rows[0].bankIfsc,
+        bankAccountName: rows[0].bankAccountName,
+        bankName: rows[0].bankName,
+        merchantState: rows[0].merchantState,
+        razorpayKeyId: rows[0].razorpayKeyId,
+        razorpayKeySecret: rows[0].razorpayKeySecret,
+        razorpayWebhookSecret: rows[0].razorpayWebhookSecret,
+        defaultGstRate: rows[0].defaultGstRate,
+        updatedAt: rows[0].updatedAt.getTime(),
+      };
+    }
+  } catch {}
 
-    if (current) {
-      tx.update(merchantSettings)
+  return cachedSettings;
+}
+
+export function getMerchantSettings(): MerchantConfig {
+  return cachedSettings;
+}
+
+export async function updateMerchantSettings(updates: Partial<MerchantConfig>): Promise<MerchantConfig> {
+  const current = await loadMerchantSettings();
+
+  const newName = updates.merchantName ?? current.merchantName;
+  const newUpiId = updates.merchantUpiId ?? current.merchantUpiId;
+  const newBankAccountNumber = updates.bankAccountNumber ?? current.bankAccountNumber;
+  const newBankIfsc = updates.bankIfsc ?? current.bankIfsc;
+  const newBankAccountName = updates.bankAccountName ?? current.bankAccountName;
+  const newBankName = updates.bankName ?? current.bankName;
+  const newState = updates.merchantState ?? current.merchantState;
+  const newKeyId = updates.razorpayKeyId ?? current.razorpayKeyId;
+  const newKeySecret = updates.razorpayKeySecret ?? current.razorpayKeySecret;
+  const newWebhookSecret = updates.razorpayWebhookSecret ?? current.razorpayWebhookSecret;
+  const newGstRate = updates.defaultGstRate ?? current.defaultGstRate;
+  const now = new Date();
+
+  await db.transaction(async (tx) => {
+    const existing = await tx
+      .select()
+      .from(merchantSettings)
+      .where(eq(merchantSettings.id, 'default'))
+      .limit(1);
+
+    if (existing[0]) {
+      await tx
+        .update(merchantSettings)
         .set({
           merchantName: newName,
           merchantUpiId: newUpiId,
+          bankAccountNumber: newBankAccountNumber,
+          bankIfsc: newBankIfsc,
+          bankAccountName: newBankAccountName,
+          bankName: newBankName,
           merchantState: newState,
           razorpayKeyId: newKeyId,
           razorpayKeySecret: newKeySecret,
@@ -75,35 +106,42 @@ export function updateMerchantSettings(updates: Partial<MerchantConfig>): Mercha
           defaultGstRate: newGstRate,
           updatedAt: now,
         })
-        .where(eq(merchantSettings.id, 'default'))
-        .run();
+        .where(eq(merchantSettings.id, 'default'));
     } else {
-      tx.insert(merchantSettings)
-        .values({
-          id: 'default',
-          merchantName: newName,
-          merchantUpiId: newUpiId,
-          merchantState: newState,
-          razorpayKeyId: newKeyId,
-          razorpayKeySecret: newKeySecret,
-          razorpayWebhookSecret: newWebhookSecret,
-          defaultGstRate: newGstRate,
-          updatedAt: now,
-        })
-        .run();
+      await tx.insert(merchantSettings).values({
+        id: 'default',
+        merchantName: newName,
+        merchantUpiId: newUpiId,
+        bankAccountNumber: newBankAccountNumber,
+        bankIfsc: newBankIfsc,
+        bankAccountName: newBankAccountName,
+        bankName: newBankName,
+        merchantState: newState,
+        razorpayKeyId: newKeyId,
+        razorpayKeySecret: newKeySecret,
+        razorpayWebhookSecret: newWebhookSecret,
+        defaultGstRate: newGstRate,
+        updatedAt: now,
+      });
     }
-
-    return {
-      merchantName: newName,
-      merchantUpiId: newUpiId,
-      merchantState: newState,
-      razorpayKeyId: newKeyId,
-      razorpayKeySecret: newKeySecret,
-      razorpayWebhookSecret: newWebhookSecret,
-      defaultGstRate: newGstRate,
-      updatedAt: now.getTime(),
-    };
   });
+
+  cachedSettings = {
+    merchantName: newName,
+    merchantUpiId: newUpiId,
+    bankAccountNumber: newBankAccountNumber,
+    bankIfsc: newBankIfsc,
+    bankAccountName: newBankAccountName,
+    bankName: newBankName,
+    merchantState: newState,
+    razorpayKeyId: newKeyId,
+    razorpayKeySecret: newKeySecret,
+    razorpayWebhookSecret: newWebhookSecret,
+    defaultGstRate: newGstRate,
+    updatedAt: now.getTime(),
+  };
+
+  return cachedSettings;
 }
 
 export async function testRazorpayConnectivity(

@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { OrderItem } from '@/context/AdminOrdersContext';
-import { RefreshCw, ExternalLink, History, CheckCircle, Search } from 'lucide-react';
+import { RefreshCw, ExternalLink, History, CheckCircle, Search, Building } from 'lucide-react';
 
 interface OrdersTableProps {
   orders: OrderItem[];
@@ -14,6 +14,7 @@ interface OrdersTableProps {
   onRefresh?: () => void;
   onRetry: (orderId: string) => Promise<boolean>;
   onOpenConfirmUpi: (order: OrderItem) => void;
+  onOpenConfirmBank: (order: OrderItem) => void;
   onOpenAttempts: (order: OrderItem) => void;
 }
 
@@ -23,6 +24,7 @@ export function OrdersTable({
   onRefresh,
   onRetry,
   onOpenConfirmUpi,
+  onOpenConfirmBank,
   onOpenAttempts,
 }: OrdersTableProps) {
   const [search, setSearch] = useState('');
@@ -33,7 +35,7 @@ export function OrdersTable({
     return (
       order.id.toLowerCase().includes(term) ||
       (order.customerName || '').toLowerCase().includes(term) ||
-      (order.customerEmail || '').toLowerCase().includes(term) ||
+      (order.programDuration || '').toLowerCase().includes(term) ||
       order.identifierId.toLowerCase().includes(term)
     );
   });
@@ -45,12 +47,18 @@ export function OrdersTable({
   };
 
   const getStatusBadge = (order: OrderItem) => {
-    const isExpired = new Date(order.expiresAt).getTime() < Date.now() && order.status === 'pending';
+    const isExpired = order.expiresAt
+      ? new Date(order.expiresAt).getTime() < Date.now() && order.status === 'pending'
+      : false;
+
     if (order.status === 'paid') {
       return <Badge variant="success">Paid</Badge>;
     }
     if (order.status === 'upi_claimed') {
       return <Badge variant="orange">UPI Claimed</Badge>;
+    }
+    if (order.status === 'bank_claimed') {
+      return <Badge variant="orange">Bank Claimed</Badge>;
     }
     if (isExpired || order.status === 'expired') {
       return <Badge variant="danger">Expired</Badge>;
@@ -67,7 +75,7 @@ export function OrdersTable({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by Order ID, Name..."
+              placeholder="Search by Order ID, Duration..."
               className="pl-9"
             />
           </div>
@@ -93,11 +101,12 @@ export function OrdersTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Order ID</TableHead>
+              <TableHead>Order ID & Program</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Base & Taxes</TableHead>
               <TableHead>Total (INR)</TableHead>
+              <TableHead>Validity</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Attempts</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -106,49 +115,48 @@ export function OrdersTable({
           <TableBody>
             {loading && orders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                <TableCell colSpan={9} className="text-center py-8 text-slate-500">
                   Loading payment requests...
                 </TableCell>
               </TableRow>
             ) : filteredOrders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-slate-500">
+                <TableCell colSpan={9} className="text-center py-8 text-slate-500">
                   No payment requests found matching your search.
                 </TableCell>
               </TableRow>
             ) : (
               filteredOrders.map((order) => {
-                const isExpired =
-                  new Date(order.expiresAt).getTime() < Date.now() && order.status === 'pending';
-                const checkoutBaseUrl =
-                  process.env.NEXT_PUBLIC_CHECKOUT_URL ||
-                  (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
-                    ? 'https://portal-payu-yt.vercel.app'
-                    : 'http://localhost:3001');
+                const isExpired = order.expiresAt
+                  ? new Date(order.expiresAt).getTime() < Date.now() && order.status === 'pending'
+                  : false;
+                const checkoutBaseUrl = process.env.NEXT_PUBLIC_CHECKOUT_URL || 'http://localhost:3001';
                 const payUrl = `${checkoutBaseUrl}/pay/${order.identifierId}`;
 
                 return (
                   <TableRow key={order.id}>
                     <TableCell>
                       <div className="font-mono text-xs font-semibold text-slate-900">{order.id}</div>
-                      <span className="text-xs text-slate-400 font-mono">
-                        {order.identifierId.slice(0, 14)}...
-                      </span>
+                      <div className="flex items-center space-x-1 mt-0.5">
+                        <Badge variant={order.isFreeTrial ? 'orange' : 'slate'} className="text-[10px]">
+                          {order.programDuration || '1 Month'}
+                        </Badge>
+                      </div>
                     </TableCell>
 
                     <TableCell>
                       <div className="font-medium text-slate-900">
-                        {order.customerName || 'Anonymous'}
+                        {order.customerName || 'Awaiting Customer'}
                       </div>
-                      <div className="text-xs text-slate-500">{order.customerEmail || 'No email'}</div>
+                      <div className="text-xs text-slate-500">{order.customerEmail || 'No email provided'}</div>
                     </TableCell>
 
                     <TableCell>
                       <div className="text-xs text-slate-800">
-                        {order.state || 'Pending Geo'}
+                        {order.state || 'Auto on Link Open'}
                       </div>
                       <Badge variant={order.isForeign ? 'orange' : 'slate'} className="mt-0.5 text-[10px]">
-                        {order.isForeign ? 'Foreign' : 'Domestic'}
+                        {order.isForeign ? 'International' : 'Domestic'}
                       </Badge>
                     </TableCell>
 
@@ -157,13 +165,19 @@ export function OrdersTable({
                         Base: INR {order.baseAmount.toFixed(2)}
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        {order.igst > 0 ? `IGST: ${order.igst}` : `CGST+SGST: ${order.cgst + order.sgst}`}
+                        {order.isForeign ? 'GST: 0% (Export)' : order.igst > 0 ? `IGST: ${order.igst}` : `CGST+SGST: ${order.cgst + order.sgst}`}
                       </div>
                     </TableCell>
 
                     <TableCell>
                       <span className="font-bold text-slate-900">
                         INR {order.totalAmount.toFixed(2)}
+                      </span>
+                    </TableCell>
+
+                    <TableCell>
+                      <span className="text-xs font-medium text-slate-600">
+                        {order.expiresAt ? new Date(order.expiresAt).toLocaleString() : 'No Expiry'}
                       </span>
                     </TableCell>
 
@@ -191,6 +205,18 @@ export function OrdersTable({
                           >
                             <CheckCircle className="h-3.5 w-3.5" />
                             <span>Confirm UPI</span>
+                          </Button>
+                        )}
+
+                        {order.status === 'bank_claimed' && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => onOpenConfirmBank(order)}
+                            className="flex items-center space-x-1 text-xs"
+                          >
+                            <Building className="h-3.5 w-3.5" />
+                            <span>Confirm Bank</span>
                           </Button>
                         )}
 

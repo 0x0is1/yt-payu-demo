@@ -20,17 +20,19 @@
 - Owns `backend/`.
 - Writes clean code with zero comments.
 - Enforces MVC: Models (`db/schema.ts`), Controllers (`controllers/`), Services (`services/`), Repositories (`repositories/`).
-- Enforces ACID transactions across all order, payment, and webhook mutations using Drizzle transactions.
-- Configures Elysia REST routes, WebSocket connections (`ws`), Drizzle ORM SQLite database, and migration scripts.
+- Enforces ACID transactions across all order, payment, and webhook mutations using Drizzle PostgreSQL transactions.
+- Configures Elysia REST routes, WebSocket connections (`ws`), Drizzle ORM PostgreSQL (`postgres.js`) database, and migration scripts.
 - Implements Razorpay integration using credentials from `D:/codes/fw-flextudy/services/.env.local`. No mock data.
 - Implements HMAC-SHA256 webhook signature verification for `payment.captured`.
 - Implements Indian GST taxation engine:
-  - Intra-state (Customer state == Merchant state "Karnataka"): equal CGST + SGST.
-  - Inter-state (Customer state != Merchant state): single IGST.
+  - Intra-state (Customer state == Merchant state "Karnataka"): equal CGST + SGST (18%).
+  - Inter-state (Customer state != Merchant state): single IGST (18%).
   - Foreign customer / international: 0% GST (Zero-rated export).
-  - 2% Razorpay fee calculation.
+  - Free trial: 0% GST.
+  - Razorpay fee calculation (+2% gateway fee).
 - Implements dynamic pricing endpoint (`POST /api/orders/:identifierId/calculate-pricing`).
 - Implements OpenStreetMap Nominatim reverse-geocoding proxy (`/api/location/resolve-state`) resolving both state and country.
+- Supports No Expiry (`expiresAt: null`), program durations (1, 2, 3, 6, 12 months, or Free Trial), UPI and Bank Transfer flows.
 - Writes comprehensive unit and integration tests (`*.test.ts`) using `bun test`.
 
 ### 2. Admin MFE Engineer (Next.js :3000)
@@ -42,10 +44,11 @@
 - Enforces golden and orangish solid color scheme without gradients, emojis, or duotone icons.
 - Ensures all dialogs, sheets, and popups are rendered inline without portaling.
 - Reuses shadcn/ui components (`Button`, `Input`, `Table`, `Badge`, `Card`, `Select`, etc.).
-- Builds Order Generator form (Amount, optional Name, Address, auto-synced Order ID, GST rate selector 18%/5%, expiry selector 30m/2h/24h/7d, Generate Pay Link).
-- Builds Admin Dashboard (listing all requests by Order ID, showing payment attempts & platforms, nationality, retry button to extend expired links +24h).
+- Builds Order Generator form (Amount, Program Duration 1-12m/Free Trial, auto-synced Order ID, expiry selector 30m/2h/24h/7d/No Expiry, Generate Pay Link). Does NOT ask admin for consumer details or GST rate.
+- Builds Admin Dashboard (listing all requests by Order ID, showing payment attempts & platforms, nationality, program duration, retry button to extend expired links +24h).
 - Connects to backend WebSocket (`/ws/admin`) for real-time payment notifications.
 - Builds manual UPI confirmation interface allowing the admin to input transaction ID and verify receipt.
+- Builds Direct Bank Transfer confirmation interface allowing admin to verify UTR/reference and mark paid.
 
 ### 3. Checkout MFE Engineer (Next.js :3001)
 - Owns `apps/checkout-mfe/`.
@@ -57,16 +60,17 @@
 - Ensures all components render inline without portaling.
 - Reuses shadcn/ui components.
 - Implements identifier token lookup (`/pay/:identifierId`).
-- Implements prefill check: if details missing, displays introductory customer info collection screen.
+- Implements member onboarding: collects Member Name upon clicking/opening link, then proceeds to location and payment.
 - Implements `navigator.geolocation` gate: blocks UI if denied/unavailable, displays step-by-step instructions to enable permissions.
 - Implements disabled State field automatically resolved via backend reverse-geocoding from coordinates.
 - Implements Foreign / International Customer detection & button:
   - Displays nationality badge and "Foreign / International Customer" button/toggle.
   - Sends state & country to backend to fetch live tax and pricing calculations.
-  - For foreign customers: completely hides manual UPI and displays ONLY Razorpay option.
+  - For foreign customers: completely hides manual UPI and bank transfer, displaying ONLY Razorpay option.
 - Displays payment options:
-  - Domestic: Dual options (Razorpay with 2% cut OR Manual UPI).
-  - Foreign: Razorpay ONLY (2% cut, international card support).
+  - Domestic Indian: Dual options (UPI OR Direct Bank Transfer with zero fee). Done button ("Done - I Have Paid via UPI" / "Done - I Have Transferred via Bank") records claim and enters real-time status view.
+  - Foreign / International: Razorpay ONLY (2% gateway cut, international card support, 0% export GST). Opens Razorpay Checkout.js in desktop mode on PC rather than narrow phone wrapper, and awaits backend payment verification before showing the success screen.
+  - Free Trial: Direct zero-cost activation button.
 
 ### 4. QA & Verification Specialist (Playwright)
 - Installs Playwright as a dev dependency.

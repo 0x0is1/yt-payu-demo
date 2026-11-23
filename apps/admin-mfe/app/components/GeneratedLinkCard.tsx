@@ -29,7 +29,7 @@ export function GeneratedLinkCard({ data, onReset }: GeneratedLinkCardProps) {
   };
 
   return (
-    <Card className="border border-emerald-600 bg-white">
+    <Card className="border border-emerald-600 bg-white shadow-sm">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-slate-900">Payment Link Generated</CardTitle>
@@ -74,18 +74,20 @@ export function GeneratedLinkCard({ data, onReset }: GeneratedLinkCardProps) {
           </div>
 
           <div className="rounded border border-slate-200 p-3 bg-slate-50">
+            <span className="text-xs text-slate-500 uppercase block">Program Plan</span>
+            <span className="text-sm font-semibold text-slate-900">{order.programDuration || '1 Month'}</span>
+          </div>
+
+          <div className="rounded border border-slate-200 p-3 bg-slate-50">
             <span className="text-xs text-slate-500 uppercase block">Base Amount</span>
             <span className="text-sm font-semibold text-slate-900">INR {pricing.baseAmount?.toFixed(2)}</span>
           </div>
 
           <div className="rounded border border-slate-200 p-3 bg-slate-50">
-            <span className="text-xs text-slate-500 uppercase block">GST Rate</span>
-            <span className="text-sm font-semibold text-slate-900">{pricing.gstRate}%</span>
-          </div>
-
-          <div className="rounded border border-slate-200 p-3 bg-slate-50">
-            <span className="text-xs text-slate-500 uppercase block">Est. Total</span>
-            <span className="text-sm font-bold text-gold-600">INR {pricing.totalAmount?.toFixed(2)}</span>
+            <span className="text-xs text-slate-500 uppercase block">Validity</span>
+            <span className="text-sm font-bold text-gold-600">
+              {order.expiresAt ? new Date(order.expiresAt).toLocaleTimeString() : 'No Expiry'}
+            </span>
           </div>
         </div>
       </CardContent>

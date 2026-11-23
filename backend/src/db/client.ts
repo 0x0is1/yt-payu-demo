@@ -1,20 +1,13 @@
-import { Database } from 'bun:sqlite';
-import { drizzle } from 'drizzle-orm/bun-sqlite';
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
 import * as schema from './schema';
-import { existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
 
-const defaultDbPath = process.env.VERCEL ? '/tmp/payu.sqlite' : 'data/payu.sqlite';
-const dbPath = process.env.DATABASE_URL || defaultDbPath;
-const dbDir = dirname(dbPath);
-if (dbDir && dbDir !== '.' && !existsSync(dbDir)) {
-  mkdirSync(dbDir, { recursive: true });
-}
+const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/payu_demo';
 
-export const sqlite = new Database(dbPath);
-if (!process.env.VERCEL) {
-  sqlite.exec('PRAGMA journal_mode = WAL;');
-}
-sqlite.exec('PRAGMA foreign_keys = ON;');
+export const client = postgres(connectionString, {
+  max: 10,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
 
-export const db = drizzle(sqlite, { schema });
+export const db = drizzle(client, { schema });

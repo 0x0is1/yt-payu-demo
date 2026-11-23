@@ -1,10 +1,11 @@
 import { orderRepository } from '../repositories/orderRepository';
 import { calculatePricing } from '../services/taxEngine';
-import { createRazorpayPaymentLink } from '../services/razorpay';
+import { createRazorpayPaymentLink, createRazorpayOrder, verifyRazorpayPaymentSignature } from '../services/razorpay';
+import { getMerchantSettings } from '../services/settingsService';
 import { notificationService } from '../services/notificationService';
-import { confirmUpiSchema } from '../validators/schemas';
+import { confirmUpiSchema, confirmBankSchema, markBankPaidSchema } from '../validators/schemas';
 
-export async function createRazorpayLinkHandler({ params, set, headers }: { params: { identifierId: string }; set: any; headers?: any }) {
+export async function createRazorpayLinkHandler({ params, set }: { params: { identifierId: string }; set: any }) {
   const order = await orderRepository.findByIdentifier(params.identifierId);
   if (!order) {
     set.status = 404;
@@ -16,7 +17,8 @@ export async function createRazorpayLinkHandler({ params, set, headers }: { para
     return { success: false, error: 'Order is already paid' };
   }
 
-  if (new Date(order.expiresAt).getTime() < Date.now()) {
+  const isExpired = order.expiresAt ? new Date(order.expiresAt).getTime() < Date.now() : false;
+  if (isExpired) {
     set.status = 400;
     return { success: false, error: 'Order has expired' };
   }
@@ -24,66 +26,70 @@ export async function createRazorpayLinkHandler({ params, set, headers }: { para
   const pricing = calculatePricing({
     baseAmount: order.baseAmount,
     gstRate: order.gstRate,
+    isFreeTrial: order.isFreeTrial,
     customerState: order.state,
     customerCountry: order.country,
     isForeign: order.isForeign,
   });
 
-  if (order.razorpayPaymentLinkUrl) {
+  const settings = getMerchantSettings();
+  const keyId = settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || 'rzp_test_2xGYyaqTbp0HNw';
+
+  if (order.razorpayOrderId && order.razorpayPaymentLinkUrl) {
     return {
       success: true,
+      keyId,
+      orderId: order.razorpayOrderId,
+      amount: pricing.razorpayTotal,
       paymentLinkUrl: order.razorpayPaymentLinkUrl,
       totalWithFee: pricing.razorpayTotal,
       razorpayFee: pricing.razorpayFee,
     };
   }
 
-  let checkoutBaseUrl = process.env.CHECKOUT_URL;
-  if (!checkoutBaseUrl) {
-    const host = headers?.['host'] || '';
-    const origin = headers?.['origin'] || '';
-    const referer = headers?.['referer'] || '';
-    if (
-      process.env.VERCEL ||
-      process.env.NODE_ENV === 'production' ||
-      host.includes('vercel.app') ||
-      origin.includes('vercel.app') ||
-      referer.includes('vercel.app')
-    ) {
-      checkoutBaseUrl = 'https://portal-payu-yt.vercel.app';
-    } else {
-      checkoutBaseUrl = 'http://localhost:3001';
-    }
-  }
+  const checkoutBaseUrl = process.env.CHECKOUT_URL || 'http://localhost:3001';
   const callbackUrl = `${checkoutBaseUrl}/pay/${order.identifierId}?status=success`;
 
   try {
-    const link = await createRazorpayPaymentLink({
-      amountRupees: pricing.razorpayTotal,
-      description: `Payment for Order ${order.id}`,
-      referenceId: `${order.id}_${Date.now()}`,
-      callbackUrl,
-      customer: {
-        name: order.customerName || 'Customer',
-        email: order.customerEmail || undefined,
-        contact: order.customerPhone || undefined,
-      },
-      notes: {
-        orderId: order.id,
-        identifierId: order.identifierId,
-      },
-    });
+    const [link, razorpayOrder] = await Promise.all([
+      createRazorpayPaymentLink({
+        amountRupees: pricing.razorpayTotal,
+        description: `Payment for Order ${order.id} - ${order.programDuration}`,
+        referenceId: `${order.id}_${Date.now()}`,
+        callbackUrl,
+        customer: {
+          name: order.customerName || 'Customer',
+          email: order.customerEmail || undefined,
+          contact: order.customerPhone || undefined,
+        },
+        notes: {
+          orderId: order.id,
+          identifierId: order.identifierId,
+        },
+      }),
+      createRazorpayOrder({
+        amountRupees: pricing.razorpayTotal,
+        receipt: order.id,
+        notes: {
+          orderId: order.id,
+          identifierId: order.identifierId,
+        },
+      }),
+    ]);
 
-    await orderRepository.setRazorpayLink(order.id, link.id, link.short_url, pricing.razorpayFee);
+    await orderRepository.setRazorpayLink(order.id, link.id, link.short_url, pricing.razorpayFee, razorpayOrder.id);
     await orderRepository.recordPaymentAttempt(
       order.id,
       'razorpay',
       'link_generated',
-      JSON.stringify({ linkId: link.id, linkUrl: link.short_url, amount: pricing.razorpayTotal })
+      JSON.stringify({ orderId: razorpayOrder.id, linkId: link.id, linkUrl: link.short_url, amount: pricing.razorpayTotal })
     );
 
     return {
       success: true,
+      keyId,
+      orderId: razorpayOrder.id,
+      amount: pricing.razorpayTotal,
       paymentLinkUrl: link.short_url,
       totalWithFee: pricing.razorpayTotal,
       razorpayFee: pricing.razorpayFee,
@@ -114,7 +120,8 @@ export async function markUpiPaidHandler({ params, set }: { params: { identifier
     return { success: false, error: 'Order is already paid' };
   }
 
-  if (new Date(order.expiresAt).getTime() < Date.now()) {
+  const isExpired = order.expiresAt ? new Date(order.expiresAt).getTime() < Date.now() : false;
+  if (isExpired) {
     set.status = 400;
     return { success: false, error: 'Order has expired' };
   }
@@ -127,7 +134,7 @@ export async function markUpiPaidHandler({ params, set }: { params: { identifier
     identifierId: order.identifierId,
     amount: order.totalAmount,
     customerName: order.customerName,
-    platform: 'manual_upi',
+    platform: 'upi',
     timestamp: new Date().toISOString(),
   });
 
@@ -158,9 +165,116 @@ export async function confirmUpiHandler({ params, body, set }: { params: { id: s
     identifierId: order.identifierId,
     amount: order.totalAmount,
     customerName: order.customerName,
-    platform: 'manual_upi',
+    platform: 'upi',
     timestamp: new Date().toISOString(),
     data: { upiTransactionId: parseResult.data.upiTransactionId },
+  });
+
+  return {
+    success: true,
+    order: updated,
+  };
+}
+
+export async function markBankPaidHandler({ params, body, set }: { params: { identifierId: string }; body: any; set: any }) {
+  const parseResult = markBankPaidSchema.safeParse(body || {});
+  const bankReferenceId = parseResult.success ? parseResult.data.bankReferenceId : undefined;
+
+  const order = await orderRepository.findByIdentifier(params.identifierId);
+  if (!order) {
+    set.status = 404;
+    return { success: false, error: 'Order not found' };
+  }
+
+  if (order.isForeign) {
+    set.status = 400;
+    return { success: false, error: 'Direct bank transfer is not available for international customers. Please use Razorpay.' };
+  }
+
+  if (order.status === 'paid') {
+    set.status = 400;
+    return { success: false, error: 'Order is already paid' };
+  }
+
+  const isExpired = order.expiresAt ? new Date(order.expiresAt).getTime() < Date.now() : false;
+  if (isExpired) {
+    set.status = 400;
+    return { success: false, error: 'Order has expired' };
+  }
+
+  const updated = await orderRepository.markBankPaid(params.identifierId, bankReferenceId);
+
+  notificationService.broadcast({
+    event: 'BANK_PAID_CLAIMED',
+    orderId: order.id,
+    identifierId: order.identifierId,
+    amount: order.totalAmount,
+    customerName: order.customerName,
+    platform: 'bank_transfer',
+    timestamp: new Date().toISOString(),
+    data: { bankReferenceId },
+  });
+
+  return {
+    success: true,
+    order: updated,
+  };
+}
+
+export async function confirmBankHandler({ params, body, set }: { params: { id: string }; body: any; set: any }) {
+  const parseResult = confirmBankSchema.safeParse(body);
+  if (!parseResult.success) {
+    set.status = 400;
+    return { success: false, errors: parseResult.error.flatten() };
+  }
+
+  const order = await orderRepository.findById(params.id);
+  if (!order) {
+    set.status = 404;
+    return { success: false, error: 'Order not found' };
+  }
+
+  const updated = await orderRepository.confirmBankPayment(params.id, parseResult.data.bankReferenceId);
+
+  notificationService.broadcast({
+    event: 'BANK_CONFIRMED',
+    orderId: order.id,
+    identifierId: order.identifierId,
+    amount: order.totalAmount,
+    customerName: order.customerName,
+    platform: 'bank_transfer',
+    timestamp: new Date().toISOString(),
+    data: { bankReferenceId: parseResult.data.bankReferenceId },
+  });
+
+  return {
+    success: true,
+    order: updated,
+  };
+}
+
+export async function activateFreeTrialHandler({ params, set }: { params: { identifierId: string }; set: any }) {
+  const order = await orderRepository.findByIdentifier(params.identifierId);
+  if (!order) {
+    set.status = 404;
+    return { success: false, error: 'Order not found' };
+  }
+
+  if (!order.isFreeTrial && order.baseAmount > 0) {
+    set.status = 400;
+    return { success: false, error: 'This payment link is not a free trial request' };
+  }
+
+  const updated = await orderRepository.activateFreeTrial(params.identifierId);
+
+  notificationService.broadcast({
+    event: 'TRIAL_ACTIVATED',
+    orderId: order.id,
+    identifierId: order.identifierId,
+    amount: 0,
+    customerName: order.customerName,
+    platform: 'free_trial',
+    timestamp: new Date().toISOString(),
   });
 
   return {
@@ -177,7 +291,18 @@ export async function verifyRazorpayPaymentHandler({ params, body, set }: { para
   }
 
   const paymentId = body?.paymentId || body?.razorpay_payment_id || `pay_${Date.now()}`;
-  const fulfilled = await orderRepository.fulfillRazorpayCaptured(order.id, paymentId);
+  const razorpayOrderId = body?.orderId || body?.razorpay_order_id || order.razorpayOrderId;
+  const signature = body?.signature || body?.razorpay_signature;
+
+  if (signature && razorpayOrderId && paymentId) {
+    const isValid = verifyRazorpayPaymentSignature(razorpayOrderId, paymentId, signature);
+    if (!isValid) {
+      set.status = 400;
+      return { success: false, error: 'Invalid payment signature' };
+    }
+  }
+
+  const fulfilled = await orderRepository.fulfillRazorpayCaptured(order.id, paymentId, razorpayOrderId || undefined);
 
   notificationService.broadcast({
     event: 'PAYMENT_CAPTURED',
@@ -187,7 +312,7 @@ export async function verifyRazorpayPaymentHandler({ params, body, set }: { para
     customerName: order.customerName,
     platform: 'razorpay',
     timestamp: new Date().toISOString(),
-    data: { paymentId },
+    data: { paymentId, razorpayOrderId },
   });
 
   return { success: true, order: fulfilled };

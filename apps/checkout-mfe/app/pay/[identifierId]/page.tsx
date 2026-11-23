@@ -8,6 +8,7 @@ import { CustomerPrefillForm } from './components/CustomerPrefillForm';
 import { LocationGateView } from './components/LocationGateView';
 import { AddressAndForeignView } from './components/AddressAndForeignView';
 import { PaymentMethodSelector } from './components/PaymentMethodSelector';
+import { PaymentVerifyingView } from './components/PaymentVerifyingView';
 import { PaymentStatusScreen } from './components/PaymentStatusScreen';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { AlertCircle, Clock, Loader2 } from 'lucide-react';
@@ -62,6 +63,7 @@ function CheckoutContent() {
   if (step === 'location_gate') return <LocationGateView />;
   if (step === 'address_review') return <AddressAndForeignView />;
   if (step === 'payment_selection') return <PaymentMethodSelector />;
+  if (step === 'verifying_payment') return <PaymentVerifyingView />;
   if (step === 'success') return <PaymentStatusScreen />;
 
   return null;

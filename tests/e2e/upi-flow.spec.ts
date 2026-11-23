@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test.describe('Manual UPI Payment & Admin Confirmation Flow', () => {
+test.describe('Manual UPI & Bank Transfer Payment Flow', () => {
   let checkoutUrl = '';
   let orderId = '';
 
@@ -10,9 +10,8 @@ test.describe('Manual UPI Payment & Admin Confirmation Flow', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         baseAmount: 1500,
-        gstRate: 18,
-        customerName: 'Kavita Rao',
-        customerEmail: 'kavita@example.com',
+        programDuration: '1 Month',
+        expiryMinutes: 0,
       }),
     });
     const data = await res.json();
@@ -28,25 +27,31 @@ test.describe('Manual UPI Payment & Admin Confirmation Flow', () => {
     const customerPage = await customerContext.newPage();
 
     await customerPage.goto(checkoutUrl);
-    await expect(customerPage.locator('text=Delivery & Billing Address')).toBeVisible({ timeout: 20000 });
+    await expect(customerPage.locator('text=Member Registration')).toBeVisible({ timeout: 20000 });
 
+    await customerPage.fill('#custName', 'Kavita Rao');
+    await customerPage.click('button:has-text("Continue to Verification")');
+
+    await expect(customerPage.locator('text=Delivery & Billing Address')).toBeVisible({ timeout: 20000 });
     await customerPage.click('button:has-text("Proceed to Payment Options")');
     await expect(customerPage.locator('text=Select Payment Option')).toBeVisible({ timeout: 15000 });
 
-    await customerPage.click('text=Manual UPI Transfer');
+    await customerPage.click('text=UPI Transfer');
 
     await expect(customerPage.locator('img[alt="UPI QR Code"]')).toBeVisible({ timeout: 10000 });
     await expect(customerPage.locator('text=payu-demo@okhdfcbank')).toBeVisible();
 
     await customerPage.click('button:has-text("I Have Paid via UPI")');
 
-    await expect(customerPage.locator('h3:has-text("Payment Acknowledged")')).toBeVisible({ timeout: 15000 });
+    await expect(customerPage.locator('h3:has-text("UPI Payment Submitted")')).toBeVisible({ timeout: 15000 });
     await expect(customerPage.locator('text=Verification Pending').first()).toBeVisible({ timeout: 15000 });
 
     const adminContext = await browser.newContext();
     const adminPage = await adminContext.newPage();
 
-    await adminPage.goto('http://localhost:3000/orders');
+    await adminPage.goto('http://localhost:3000/login');
+    await adminPage.click('button:has-text("Sign In as Administrator")');
+    await adminPage.click('nav a:has-text("Requests")');
     await expect(adminPage.locator('h1')).toContainText('Payment Requests & Reconciliation');
 
     await expect(adminPage.locator(`text=${orderId}`)).toBeVisible({ timeout: 15000 });

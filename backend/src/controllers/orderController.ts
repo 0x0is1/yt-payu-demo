@@ -8,7 +8,7 @@ export async function getNextOrderIdHandler() {
   return { success: true, nextOrderId };
 }
 
-export async function generateLinkHandler({ body, set, headers }: { body: any; set: any; headers?: any }) {
+export async function generateLinkHandler({ body, set }: { body: any; set: any; headers?: any }) {
   const parseResult = generateOrderSchema.safeParse(body);
   if (!parseResult.success) {
     set.status = 400;
@@ -21,18 +21,20 @@ export async function generateLinkHandler({ body, set, headers }: { body: any; s
 
   const pricing = calculatePricing({
     baseAmount: data.baseAmount,
-    gstRate: data.gstRate,
+    isFreeTrial: data.isFreeTrial,
     customerState: data.state,
     customerCountry: data.country,
     isForeign: data.country?.toLowerCase() !== 'india' && data.country !== undefined,
   });
 
-  const expiresAt = new Date(Date.now() + data.expiryMinutes * 60 * 1000);
+  const expiresAt = data.expiryMinutes > 0 ? new Date(Date.now() + data.expiryMinutes * 60 * 1000) : null;
 
   const newOrder = await orderRepository.createOrder({
     id: orderId,
     identifierId,
     baseAmount: pricing.baseAmount,
+    programDuration: data.programDuration,
+    isFreeTrial: data.isFreeTrial,
     gstRate: pricing.gstRate,
     cgst: pricing.cgst,
     sgst: pricing.sgst,
@@ -59,23 +61,7 @@ export async function generateLinkHandler({ body, set, headers }: { body: any; s
     timestamp: new Date().toISOString(),
   });
 
-  let checkoutBaseUrl = process.env.CHECKOUT_URL;
-  if (!checkoutBaseUrl) {
-    const host = headers?.['host'] || '';
-    const origin = headers?.['origin'] || '';
-    const referer = headers?.['referer'] || '';
-    if (
-      process.env.VERCEL ||
-      process.env.NODE_ENV === 'production' ||
-      host.includes('vercel.app') ||
-      origin.includes('vercel.app') ||
-      referer.includes('vercel.app')
-    ) {
-      checkoutBaseUrl = 'https://portal-payu-yt.vercel.app';
-    } else {
-      checkoutBaseUrl = 'http://localhost:3001';
-    }
-  }
+  const checkoutBaseUrl = process.env.CHECKOUT_URL || 'http://localhost:3001';
   const paymentLink = `${checkoutBaseUrl}/pay/${identifierId}`;
 
   return {
@@ -93,7 +79,7 @@ export async function lookupOrderHandler({ params, set }: { params: { identifier
     return { success: false, error: 'Order not found' };
   }
 
-  const isExpired = new Date(order.expiresAt).getTime() < Date.now();
+  const isExpired = order.expiresAt ? new Date(order.expiresAt).getTime() < Date.now() : false;
   if (isExpired && order.status === 'pending') {
     return {
       success: true,

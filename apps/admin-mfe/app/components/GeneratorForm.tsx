@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Send } from 'lucide-react';
+import { RefreshCw, Send, Sparkles } from 'lucide-react';
 
 interface GeneratorFormProps {
   onSuccess: (result: any) => void;
@@ -14,16 +14,9 @@ interface GeneratorFormProps {
 
 export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
   const [amount, setAmount] = useState<string>('1000');
+  const [programDuration, setProgramDuration] = useState<string>('1 Month');
   const [orderId, setOrderId] = useState<string>('');
-  const [gstRate, setGstRate] = useState<number>(18);
   const [expiryMinutes, setExpiryMinutes] = useState<number>(1440);
-  const [customerName, setCustomerName] = useState<string>('');
-  const [customerEmail, setCustomerEmail] = useState<string>('');
-  const [customerPhone, setCustomerPhone] = useState<string>('');
-  const [addressLine, setAddressLine] = useState<string>('');
-  const [city, setCity] = useState<string>('');
-  const [state, setState] = useState<string>('');
-  const [nationality, setNationality] = useState<string>('Indian');
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,13 +43,24 @@ export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
     fetchNextOrderId();
   };
 
+  const handleDurationChange = (val: string) => {
+    setProgramDuration(val);
+    if (val === 'Free Trial') {
+      setAmount('0');
+    } else if (amount === '0') {
+      setAmount('1000');
+    }
+  };
+
+  const isTrial = programDuration === 'Free Trial';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setError('Please enter a valid amount greater than 0');
+    if (isNaN(numAmount) || numAmount < 0) {
+      setError('Please enter a valid amount');
       return;
     }
 
@@ -69,15 +73,9 @@ export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
         body: JSON.stringify({
           orderId: orderId.trim() || undefined,
           baseAmount: numAmount,
-          gstRate,
+          programDuration,
+          isFreeTrial: isTrial,
           expiryMinutes,
-          customerName: customerName.trim() || undefined,
-          customerEmail: customerEmail.trim() || undefined,
-          customerPhone: customerPhone.trim() || undefined,
-          addressLine: addressLine.trim() || undefined,
-          city: city.trim() || undefined,
-          state: state.trim() || undefined,
-          nationality: nationality.trim() || 'Indian',
         }),
       });
 
@@ -96,12 +94,22 @@ export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
   };
 
   return (
-    <Card className="border border-gold-600">
+    <Card className="border border-gold-600 bg-white shadow-sm">
       <CardHeader>
-        <CardTitle>Generate Payment Request Link</CardTitle>
-        <CardDescription>
-          Enter the order details, tax slab, and optional customer information to generate a checkout link.
-        </CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Generate Payment Request Link</CardTitle>
+            <CardDescription>
+              Set amount, program duration or trial, and validity. Taxes and customer info are dynamically calculated on member checkout.
+            </CardDescription>
+          </div>
+          {isTrial && (
+            <div className="rounded-full bg-amber-100 border border-gold-600 px-3 py-1 flex items-center space-x-1.5 text-xs font-semibold text-gold-800">
+              <Sparkles className="h-3.5 w-3.5 text-gold-600" />
+              <span>Trial Mode</span>
+            </div>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -113,19 +121,44 @@ export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
+              <Label htmlFor="programDuration">Program Duration / Plan *</Label>
+              <Select
+                id="programDuration"
+                value={programDuration}
+                onChange={(e) => handleDurationChange(e.target.value)}
+              >
+                <option value="Free Trial">Free Trial</option>
+                <option value="1 Month">1 Month</option>
+                <option value="2 Months">2 Months</option>
+                <option value="3 Months">3 Months</option>
+                <option value="6 Months">6 Months</option>
+                <option value="12 Months">12 Months</option>
+              </Select>
+              <span className="text-[11px] text-slate-500 block">
+                Select whether this request is for a free trial or paid program enrollment.
+              </span>
+            </div>
+
+            <div className="space-y-1">
               <Label htmlFor="amount">Base Amount (INR) *</Label>
               <Input
                 id="amount"
                 type="number"
                 step="0.01"
-                min="1"
+                min="0"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="1000.00"
+                disabled={isTrial}
                 required
               />
+              <span className="text-[11px] text-slate-500 block">
+                {isTrial ? 'Free trial amount is set to 0.00 INR' : 'Exclusive of location-based taxes calculated dynamically.'}
+              </span>
             </div>
+          </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <Label htmlFor="orderId">Order ID (Auto-Synced)</Label>
@@ -145,21 +178,6 @@ export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
                 placeholder="Auto-generated if blank"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="gstRate">Services GST Tax Slab *</Label>
-              <Select
-                id="gstRate"
-                value={gstRate.toString()}
-                onChange={(e) => setGstRate(Number(e.target.value))}
-              >
-                <option value="18">18% (Standard Digital / Commercial Services)</option>
-                <option value="5">5% (Concessional / Transport Services)</option>
-                <option value="0">0% (Exempt Services)</option>
-              </Select>
-            </div>
 
             <div className="space-y-1">
               <Label htmlFor="expiry">Link Validity Period *</Label>
@@ -168,81 +186,15 @@ export function GeneratorForm({ onSuccess }: GeneratorFormProps) {
                 value={expiryMinutes.toString()}
                 onChange={(e) => setExpiryMinutes(Number(e.target.value))}
               >
+                <option value="0">No Expiry (Never Expires)</option>
                 <option value="30">30 Minutes</option>
                 <option value="120">2 Hours</option>
                 <option value="1440">24 Hours (Default)</option>
                 <option value="10080">7 Days</option>
               </Select>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
-              Optional Customer Prefill Details
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1">
-                <Label htmlFor="customerName">Customer Name</Label>
-                <Input
-                  id="customerName"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="customerEmail">Email Address</Label>
-                <Input
-                  id="customerEmail"
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="rahul@example.com"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="customerPhone">Phone Number</Label>
-                <Input
-                  id="customerPhone"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="9876543210"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-3">
-              <div className="space-y-1 md:col-span-2">
-                <Label htmlFor="addressLine">Street Address</Label>
-                <Input
-                  id="addressLine"
-                  value={addressLine}
-                  onChange={(e) => setAddressLine(e.target.value)}
-                  placeholder="Building, street, flat"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="city">City</Label>
-                <Input
-                  id="city"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. Bengaluru"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label htmlFor="state">State</Label>
-                <Input
-                  id="state"
-                  value={state}
-                  onChange={(e) => setState(e.target.value)}
-                  placeholder="e.g. Karnataka"
-                />
-              </div>
+              <span className="text-[11px] text-slate-500 block">
+                Select how long this checkout link remains accessible to the member.
+              </span>
             </div>
           </div>
 

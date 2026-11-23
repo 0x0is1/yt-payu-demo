@@ -2,10 +2,11 @@ import { getMerchantSettings } from './settingsService';
 
 export interface PricingInput {
   baseAmount: number;
-  gstRate: number;
+  gstRate?: number;
   customerState?: string | null;
   customerCountry?: string | null;
   isForeign?: boolean | null;
+  isFreeTrial?: boolean | null;
 }
 
 export interface PricingResult {
@@ -18,8 +19,9 @@ export interface PricingResult {
   razorpayFee: number;
   razorpayTotal: number;
   isForeign: boolean;
-  taxType: 'intra_state' | 'inter_state' | 'zero_rated_export';
-  availableMethods: ('razorpay' | 'manual_upi')[];
+  isFreeTrial: boolean;
+  taxType: 'free_trial' | 'intra_state' | 'inter_state' | 'zero_rated_export';
+  availableMethods: ('razorpay' | 'upi' | 'bank_transfer')[];
 }
 
 export function calculatePricing(input: PricingInput, merchantStateOverride?: string): PricingResult {
@@ -28,9 +30,27 @@ export function calculatePricing(input: PricingInput, merchantStateOverride?: st
   const customerState = (input.customerState || '').trim().toLowerCase();
   const customerCountry = (input.customerCountry || 'India').trim().toLowerCase();
   const isForeign = Boolean(input.isForeign || (customerCountry !== 'india' && customerCountry !== ''));
+  const isFreeTrial = Boolean(input.isFreeTrial || input.baseAmount === 0);
 
-  const baseAmount = Math.round(input.baseAmount * 100) / 100;
-  const gstRate = input.gstRate;
+  const baseAmount = isFreeTrial ? 0 : Math.round(input.baseAmount * 100) / 100;
+  const standardGstRate = input.gstRate !== undefined ? input.gstRate : 18.0;
+
+  if (isFreeTrial) {
+    return {
+      baseAmount: 0,
+      gstRate: 0,
+      cgst: 0,
+      sgst: 0,
+      igst: 0,
+      totalAmount: 0,
+      razorpayFee: 0,
+      razorpayTotal: 0,
+      isForeign,
+      isFreeTrial: true,
+      taxType: 'free_trial',
+      availableMethods: isForeign ? ['razorpay'] : ['upi', 'bank_transfer'],
+    };
+  }
 
   if (isForeign) {
     const totalAmount = baseAmount;
@@ -47,6 +67,7 @@ export function calculatePricing(input: PricingInput, merchantStateOverride?: st
       razorpayFee,
       razorpayTotal,
       isForeign: true,
+      isFreeTrial: false,
       taxType: 'zero_rated_export',
       availableMethods: ['razorpay'],
     };
@@ -55,7 +76,7 @@ export function calculatePricing(input: PricingInput, merchantStateOverride?: st
   const isIntraState = customerState !== '' && customerState === merchantState;
 
   if (isIntraState) {
-    const halfRate = gstRate / 2;
+    const halfRate = standardGstRate / 2;
     const cgst = Math.round(((baseAmount * halfRate) / 100) * 100) / 100;
     const sgst = Math.round(((baseAmount * halfRate) / 100) * 100) / 100;
     const igst = 0;
@@ -65,7 +86,7 @@ export function calculatePricing(input: PricingInput, merchantStateOverride?: st
 
     return {
       baseAmount,
-      gstRate,
+      gstRate: standardGstRate,
       cgst,
       sgst,
       igst,
@@ -73,21 +94,22 @@ export function calculatePricing(input: PricingInput, merchantStateOverride?: st
       razorpayFee,
       razorpayTotal,
       isForeign: false,
+      isFreeTrial: false,
       taxType: 'intra_state',
-      availableMethods: ['razorpay', 'manual_upi'],
+      availableMethods: ['upi', 'bank_transfer'],
     };
   }
 
   const cgst = 0;
   const sgst = 0;
-  const igst = Math.round(((baseAmount * gstRate) / 100) * 100) / 100;
+  const igst = Math.round(((baseAmount * standardGstRate) / 100) * 100) / 100;
   const totalAmount = Math.round((baseAmount + igst) * 100) / 100;
   const razorpayFee = Math.round(totalAmount * 0.02 * 100) / 100;
   const razorpayTotal = Math.round((totalAmount + razorpayFee) * 100) / 100;
 
   return {
     baseAmount,
-    gstRate,
+    gstRate: standardGstRate,
     cgst,
     sgst,
     igst,
@@ -95,7 +117,8 @@ export function calculatePricing(input: PricingInput, merchantStateOverride?: st
     razorpayFee,
     razorpayTotal,
     isForeign: false,
+    isFreeTrial: false,
     taxType: 'inter_state',
-    availableMethods: ['razorpay', 'manual_upi'],
+    availableMethods: ['upi', 'bank_transfer'],
   };
 }
