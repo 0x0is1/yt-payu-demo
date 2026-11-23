@@ -1,0 +1,56 @@
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+
+export const orders = sqliteTable('orders', {
+  id: text('id').primaryKey(),
+  identifierId: text('identifier_id').notNull().unique(),
+  baseAmount: real('base_amount').notNull(),
+  gstRate: real('gst_rate').notNull().default(18.0),
+  cgst: real('cgst').notNull().default(0),
+  sgst: real('sgst').notNull().default(0),
+  igst: real('igst').notNull().default(0),
+  totalAmount: real('total_amount').notNull(),
+  customerName: text('customer_name'),
+  customerEmail: text('customer_email'),
+  customerPhone: text('customer_phone'),
+  addressLine: text('address_line'),
+  city: text('city'),
+  state: text('state'),
+  country: text('country').default('India'),
+  isForeign: integer('is_foreign', { mode: 'boolean' }).default(false),
+  nationality: text('nationality').default('Indian'),
+  latitude: real('latitude'),
+  longitude: real('longitude'),
+  status: text('status').notNull().default('pending'),
+  paymentMethod: text('payment_method'),
+  razorpayPaymentLinkId: text('rzp_payment_link_id'),
+  razorpayPaymentLinkUrl: text('rzp_payment_link_url'),
+  razorpayPaymentId: text('rzp_payment_id'),
+  razorpayFee: real('rzp_fee').default(0),
+  upiTransactionId: text('upi_transaction_id'),
+  upiMarkedPaidAt: integer('upi_marked_paid_at', { mode: 'timestamp' }),
+  upiConfirmedAt: integer('upi_confirmed_at', { mode: 'timestamp' }),
+  expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const paymentAttempts = sqliteTable('payment_attempts', {
+  id: text('id').primaryKey(),
+  orderId: text('order_id').notNull().references(() => orders.id),
+  platform: text('platform').notNull(),
+  status: text('status').notNull(),
+  referenceData: text('reference_data'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+export const merchantSettings = sqliteTable('merchant_settings', {
+  id: text('id').primaryKey(),
+  merchantName: text('merchant_name').notNull().default('PayU Merchant Store'),
+  merchantUpiId: text('merchant_upi_id').notNull().default('payu-demo@okhdfcbank'),
+  merchantState: text('merchant_state').notNull().default('Karnataka'),
+  razorpayKeyId: text('rzp_key_id').notNull().default('rzp_test_2xGYyaqTbp0HNw'),
+  razorpayKeySecret: text('rzp_key_secret').notNull().default('Bj7via42B9PX6GS38kQM6fVq'),
+  razorpayWebhookSecret: text('rzp_webhook_secret').notNull().default('rzp_webhook_secret_key'),
+  defaultGstRate: real('default_gst_rate').notNull().default(18.0),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
