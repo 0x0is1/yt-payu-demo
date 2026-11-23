@@ -13,7 +13,7 @@ import { Lock } from 'lucide-react';
 
 export default function AdminOrdersDashboardPage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const { orders, loading, retryOrder, confirmUpi } = useAdminOrders();
+  const { orders, loading, fetchOrders, retryOrder, confirmUpi } = useAdminOrders();
   const [selectedForUpi, setSelectedForUpi] = useState<OrderItem | null>(null);
   const [selectedForAttempts, setSelectedForAttempts] = useState<OrderItem | null>(null);
 
@@ -62,6 +62,7 @@ export default function AdminOrdersDashboardPage() {
       <OrdersTable
         orders={orders}
         loading={loading}
+        onRefresh={fetchOrders}
         onRetry={retryOrder}
         onOpenConfirmUpi={(order) => setSelectedForUpi(order)}
         onOpenAttempts={(order) => setSelectedForAttempts(order)}

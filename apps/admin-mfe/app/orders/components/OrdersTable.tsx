@@ -11,6 +11,7 @@ import { RefreshCw, ExternalLink, History, CheckCircle, Search } from 'lucide-re
 interface OrdersTableProps {
   orders: OrderItem[];
   loading: boolean;
+  onRefresh?: () => void;
   onRetry: (orderId: string) => Promise<boolean>;
   onOpenConfirmUpi: (order: OrderItem) => void;
   onOpenAttempts: (order: OrderItem) => void;
@@ -19,6 +20,7 @@ interface OrdersTableProps {
 export function OrdersTable({
   orders,
   loading,
+  onRefresh,
   onRetry,
   onOpenConfirmUpi,
   onOpenAttempts,
@@ -59,14 +61,28 @@ export function OrdersTable({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
-        <div className="relative w-full max-w-sm">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by Order ID, Name..."
-            className="pl-9"
-          />
+        <div className="flex items-center gap-2 w-full max-w-md">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by Order ID, Name..."
+              className="pl-9"
+            />
+          </div>
+          {onRefresh && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRefresh}
+              className="flex items-center gap-1.5 flex-shrink-0"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </Button>
+          )}
         </div>
         <span className="text-xs text-slate-500 font-medium">
           Showing {filteredOrders.length} of {orders.length} requests

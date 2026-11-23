@@ -83,6 +83,8 @@ export function AdminOrdersProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     fetchOrders();
+    const interval = setInterval(fetchOrders, 4000);
+    return () => clearInterval(interval);
   }, [fetchOrders]);
 
   useEffect(() => {

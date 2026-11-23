@@ -176,11 +176,19 @@ export function CheckoutProvider({
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('status') === 'success') {
+      const isSuccess = urlParams.get('status') === 'success';
+      const paymentId = urlParams.get('razorpay_payment_id');
+      if (isSuccess || paymentId) {
         setStep('success');
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:4000';
+        fetch(`${backendUrl}/api/orders/${identifierId}/verify-razorpay`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentId: paymentId || undefined }),
+        }).catch(() => {});
       }
     }
-  }, []);
+  }, [identifierId]);
 
   useEffect(() => {
     if (step === 'location_gate' && geoStatus === 'granted' && location) {

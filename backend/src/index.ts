@@ -17,6 +17,7 @@ import {
   createRazorpayLinkHandler,
   markUpiPaidHandler,
   confirmUpiHandler,
+  verifyRazorpayPaymentHandler,
 } from './controllers/paymentController';
 import { handleRazorpayWebhook } from './controllers/webhookController';
 import { adminWebSocketHandler } from './ws/adminGateway';
@@ -66,6 +67,7 @@ export const app = new Elysia()
   .post('/api/orders/:identifierId/customer-details', submitCustomerDetailsHandler)
   .post('/api/location/resolve-state', resolveLocationHandler)
   .post('/api/orders/:identifierId/razorpay-link', createRazorpayLinkHandler)
+  .post('/api/orders/:identifierId/verify-razorpay', verifyRazorpayPaymentHandler)
   .post('/api/orders/:identifierId/mark-upi-paid', markUpiPaidHandler)
   .patch('/api/admin/orders/:id/confirm-upi', confirmUpiHandler)
   .post('/api/webhooks/razorpay', handleRazorpayWebhook);

@@ -168,3 +168,27 @@ export async function confirmUpiHandler({ params, body, set }: { params: { id: s
     order: updated,
   };
 }
+
+export async function verifyRazorpayPaymentHandler({ params, body, set }: { params: { identifierId: string }; body: any; set: any }) {
+  const order = await orderRepository.findByIdentifier(params.identifierId);
+  if (!order) {
+    set.status = 404;
+    return { success: false, error: 'Order not found' };
+  }
+
+  const paymentId = body?.paymentId || body?.razorpay_payment_id || `pay_${Date.now()}`;
+  const fulfilled = await orderRepository.fulfillRazorpayCaptured(order.id, paymentId);
+
+  notificationService.broadcast({
+    event: 'PAYMENT_CAPTURED',
+    orderId: order.id,
+    identifierId: order.identifierId,
+    amount: order.totalAmount,
+    customerName: order.customerName,
+    platform: 'razorpay',
+    timestamp: new Date().toISOString(),
+    data: { paymentId },
+  });
+
+  return { success: true, order: fulfilled };
+}
