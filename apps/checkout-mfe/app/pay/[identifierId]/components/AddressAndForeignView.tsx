@@ -12,7 +12,7 @@ import { Lock, Globe, MapPin, ArrowRight } from 'lucide-react';
 
 export function AddressAndForeignView() {
   const { order, pricing, updatePricing, submitCustomer, setStep } = useCheckoutSession();
-  const { location, manualSetForeign } = useGeolocationState();
+  const { status: geoStatus, location, manualSetForeign } = useGeolocationState();
 
   const [building, setBuilding] = useState(order?.addressLine || '');
   const [city, setCity] = useState(order?.city || location?.city || '');
@@ -20,22 +20,34 @@ export function AddressAndForeignView() {
   const [submitting, setSubmitting] = useState(false);
 
   const resolvedState = isForeign ? 'International' : (location?.state || order?.state || 'Karnataka');
-  const resolvedCountry = isForeign ? 'International' : (location?.country || order?.country || 'India');
+  const resolvedCountry = isForeign ? 'United States' : (location?.country || order?.country || 'India');
 
   const handleToggleForeign = async () => {
-    const nextForeign = !isForeign;
-    setIsForeign(nextForeign);
-    manualSetForeign(nextForeign);
-    await updatePricing(
-      nextForeign ? 'International' : (location?.state || 'Karnataka'),
-      nextForeign ? 'United States' : 'India',
-      nextForeign
-    );
+    if (isForeign) {
+      manualSetForeign(false);
+      setIsForeign(false);
+      if (geoStatus !== 'granted' || !location?.latitude) {
+        setStep('location_gate');
+        return;
+      }
+      await updatePricing(location.state || 'Karnataka', 'India', false);
+    } else {
+      setIsForeign(true);
+      manualSetForeign(true);
+      await updatePricing('International', 'United States', true);
+    }
   };
 
   const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isForeign && (geoStatus !== 'granted' || !location?.latitude)) {
+      setStep('location_gate');
+      return;
+    }
     setSubmitting(true);
+
+    const actualState = isForeign ? 'International' : (location?.state || order?.state || 'Karnataka');
+    const actualCountry = isForeign ? 'United States' : 'India';
 
     await submitCustomer({
       customerName: order?.customerName || 'Customer',
@@ -43,12 +55,12 @@ export function AddressAndForeignView() {
       customerPhone: order?.customerPhone,
       addressLine: building.trim() || undefined,
       city: city.trim() || undefined,
-      state: resolvedState,
-      country: resolvedCountry,
+      state: actualState,
+      country: actualCountry,
       isForeign,
       nationality: isForeign ? 'International' : 'Indian',
-      latitude: location?.latitude,
-      longitude: location?.longitude,
+      latitude: isForeign ? null : location?.latitude,
+      longitude: isForeign ? null : location?.longitude,
     });
 
     setSubmitting(false);

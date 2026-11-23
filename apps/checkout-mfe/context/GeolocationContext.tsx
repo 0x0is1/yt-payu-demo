@@ -100,21 +100,27 @@ export function GeolocationProvider({ children }: { children: React.ReactNode })
   }, [resolveBackendLocation]);
 
   const manualSetForeign = (isForeign: boolean) => {
-    setLocation((prev) => {
-      if (!prev) {
+    if (isForeign) {
+      setLocation((prev) => ({
+        latitude: prev?.latitude,
+        longitude: prev?.longitude,
+        city: prev?.city,
+        state: 'International',
+        country: 'United States',
+        isForeign: true,
+      }));
+    } else {
+      setLocation((prev) => {
+        if (!prev || prev.state === 'International') {
+          return null;
+        }
         return {
-          state: isForeign ? 'International' : 'Karnataka',
-          country: isForeign ? 'United States' : 'India',
-          isForeign,
+          ...prev,
+          country: 'India',
+          isForeign: false,
         };
-      }
-      return {
-        ...prev,
-        isForeign,
-        country: isForeign ? (prev.country === 'India' ? 'United States' : prev.country) : 'India',
-        state: isForeign ? 'International' : prev.state,
-      };
-    });
+      });
+    }
   };
 
   useEffect(() => {

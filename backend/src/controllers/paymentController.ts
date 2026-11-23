@@ -29,6 +29,15 @@ export async function createRazorpayLinkHandler({ params, set, headers }: { para
     isForeign: order.isForeign,
   });
 
+  if (order.razorpayPaymentLinkUrl) {
+    return {
+      success: true,
+      paymentLinkUrl: order.razorpayPaymentLinkUrl,
+      totalWithFee: pricing.razorpayTotal,
+      razorpayFee: pricing.razorpayFee,
+    };
+  }
+
   let checkoutBaseUrl = process.env.CHECKOUT_URL;
   if (!checkoutBaseUrl) {
     const host = headers?.['host'] || '';
@@ -48,36 +57,44 @@ export async function createRazorpayLinkHandler({ params, set, headers }: { para
   }
   const callbackUrl = `${checkoutBaseUrl}/pay/${order.identifierId}?status=success`;
 
-  const link = await createRazorpayPaymentLink({
-    amountRupees: pricing.razorpayTotal,
-    description: `Payment for Order ${order.id}`,
-    referenceId: order.id,
-    callbackUrl,
-    customer: {
-      name: order.customerName || 'Customer',
-      email: order.customerEmail || undefined,
-      contact: order.customerPhone || undefined,
-    },
-    notes: {
-      orderId: order.id,
-      identifierId: order.identifierId,
-    },
-  });
+  try {
+    const link = await createRazorpayPaymentLink({
+      amountRupees: pricing.razorpayTotal,
+      description: `Payment for Order ${order.id}`,
+      referenceId: `${order.id}_${Date.now()}`,
+      callbackUrl,
+      customer: {
+        name: order.customerName || 'Customer',
+        email: order.customerEmail || undefined,
+        contact: order.customerPhone || undefined,
+      },
+      notes: {
+        orderId: order.id,
+        identifierId: order.identifierId,
+      },
+    });
 
-  await orderRepository.setRazorpayLink(order.id, link.id, link.short_url, pricing.razorpayFee);
-  await orderRepository.recordPaymentAttempt(
-    order.id,
-    'razorpay',
-    'link_generated',
-    JSON.stringify({ linkId: link.id, linkUrl: link.short_url, amount: pricing.razorpayTotal })
-  );
+    await orderRepository.setRazorpayLink(order.id, link.id, link.short_url, pricing.razorpayFee);
+    await orderRepository.recordPaymentAttempt(
+      order.id,
+      'razorpay',
+      'link_generated',
+      JSON.stringify({ linkId: link.id, linkUrl: link.short_url, amount: pricing.razorpayTotal })
+    );
 
-  return {
-    success: true,
-    paymentLinkUrl: link.short_url,
-    totalWithFee: pricing.razorpayTotal,
-    razorpayFee: pricing.razorpayFee,
-  };
+    return {
+      success: true,
+      paymentLinkUrl: link.short_url,
+      totalWithFee: pricing.razorpayTotal,
+      razorpayFee: pricing.razorpayFee,
+    };
+  } catch (err: any) {
+    set.status = 500;
+    return {
+      success: false,
+      error: err.message || 'Failed to initialize Razorpay checkout session',
+    };
+  }
 }
 
 export async function markUpiPaidHandler({ params, set }: { params: { identifierId: string }; set: any }) {

@@ -219,9 +219,9 @@ export function CheckoutProvider({
       if (data.success && data.paymentLinkUrl) {
         return data.paymentLinkUrl;
       }
-      return null;
-    } catch {
-      return null;
+      throw new Error(data?.error || 'Failed to initialize Razorpay checkout session');
+    } catch (err: any) {
+      throw err;
     }
   };
 
